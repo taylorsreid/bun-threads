@@ -1,0 +1,28 @@
+{
+  "name": "bun-threadpool",
+  "author": "Taylor Reid",
+  "description": "Wrappers around Bun workers to enable thread pooling.",
+  "version": "0.0.1",
+  "homepage": "https://github.com/taylorsreid/bun-threadpool#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/taylorsreid/bun-threadpool.git"
+  },
+  "keywords": [
+    "bun",
+    "thread",
+    "pool",
+    "threadpool",
+    "multi",
+    "threading",
+    "multithreading"
+  ],
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
