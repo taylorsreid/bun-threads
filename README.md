@@ -1,4 +1,4 @@
-# bun-threadpool
+# bun-threads
 
 To install dependencies:
 

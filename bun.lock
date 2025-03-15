@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "bun-threadpool",
+      "name": "bun-threads",
       "devDependencies": {
         "@types/bun": "latest",
       },

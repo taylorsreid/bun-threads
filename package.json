@@ -1,7 +1,7 @@
 {
-  "name": "bun-threadpool",
+  "name": "bun-threads",
   "author": "Taylor Reid",
-  "description": "Wrappers around Bun workers to enable thread pooling.",
+  "description": "Wrappers around Bun workers to enable working with them as promises.",
   "version": "0.0.1",
   "homepage": "https://github.com/taylorsreid/bun-threadpool#readme",
   "repository": {
