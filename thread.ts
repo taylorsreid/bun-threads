@@ -1,8 +1,3 @@
-// type Primitive = null | undefined | boolean | number | bigint | string | symbol
-export type Serializable = null | undefined | boolean | number | bigint | string |
-Array<Serializable> | ArrayBuffer | Boolean | DataView | Date | Error | Map<Serializable, Serializable> | Number | Object | RegExp | Set<Serializable> | String |
-Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array | Float16Array | Float32Array | Float64Array | BigInt64Array | BigUint64Array
-
 export class Thread<T> {
 
     public fn: (...args: any) => T
