@@ -1,11 +1,19 @@
+export interface ThreadOptions {
+    autoStart?: boolean,
+    autoStop?: boolean
+}
+
 export class Thread<T> {
-
-    public fn: (...args: any) => T
-
-    private worker: Worker
-
-    private closed: boolean
-
+    private fn: (...args: any) => T
+    private autoStop: boolean
+    private worker: Worker | undefined
+    private _stopped: boolean
+    public get stopped(): boolean {
+        return this._stopped
+    }
+    private set stopped(value: boolean) {
+        this._stopped = value
+    }
     private _busy: boolean
     public get busy(): boolean {
         return this._busy
@@ -14,42 +22,77 @@ export class Thread<T> {
         this._busy = value
     }
 
-    constructor(fn: (...args: any) => T) {
+    // public get idle(): Promise<this> {
+
+    // }
+
+    constructor(fn: (...args: any) => T, options?: ThreadOptions) {
         this.fn = fn
-        this.worker = new Worker('./worker.ts')
-        this.closed = false
+
+        // set defaults
+        options ??= {}
+        options.autoStart ??= true
+        options.autoStop ??= false
+        
+        if (options.autoStart) {
+            this.worker = new Worker('./worker.ts')
+            this._stopped = false
+        }
+        else {
+            this._stopped = true
+        }
+        this.autoStop = options.autoStop
         this._busy = false
+    }
+
+    public start(): number {
+        if (typeof this.worker === 'undefined') {
+            this.worker = new Worker('./worker.ts')
+            this.stopped = false
+        }
+        return this.worker.threadId
     }
 
     public async run(...args: any): Promise<T> {
 
-        if (this.closed) {
-            throw new Error(`run() called on closed thread for function ${this.fn.toString()}`)
+        if (typeof this.worker === 'undefined') {
+            this.worker = new Worker('./worker.ts')
+            this.stopped = false
         }
 
         this.busy = true
+
         this.worker.postMessage({
             fn: this.fn.toString(),
             args: args
         })
+
         return new Promise<T>((resolve, reject) => {
             // @ts-expect-error
-            this.worker.onmessage = (event: MessageEvent) => {
+            this.worker.onmessage = async (event: MessageEvent) => {
                 resolve(event.data)
+                if (this.autoStop) {
+                    await this.stop()
+                }
                 this.busy = false
             }
             // @ts-expect-error
-            this.worker.onerror = (event: MessageEvent) => {
+            this.worker.onerror = async (event: MessageEvent) => {
                 reject(event.data)
+                if (this.autoStop) {
+                    await this.stop()
+                }
                 this.busy = false
             }
         })
     }
 
-    public async close(): Promise<number> {
-        if (!this.closed) {
-            this.closed = true
-            return this.worker.terminate()
+    public async stop(): Promise<number> {
+        if (typeof this.worker !== 'undefined') {
+            this.stopped = true
+            const status = await this.worker.terminate()
+            this.worker = undefined
+            return status
         }
         return Promise.resolve(0)
     }
