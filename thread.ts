@@ -1,5 +1,4 @@
 export interface ThreadOptions {
-    autoStart?: boolean,
     autoStop?: boolean
 }
 
@@ -28,20 +27,10 @@ export class Thread<T> {
 
     constructor(fn: (...args: any) => T, options?: ThreadOptions) {
         this.fn = fn
-
-        // set defaults
         options ??= {}
-        options.autoStart ??= true
         options.autoStop ??= false
-        
-        if (options.autoStart) {
-            this.worker = new Worker('./worker.ts')
-            this._stopped = false
-        }
-        else {
-            this._stopped = true
-        }
         this.autoStop = options.autoStop
+        this._stopped = true
         this._busy = false
     }
 
@@ -56,20 +45,19 @@ export class Thread<T> {
     public async run(...args: any): Promise<T> {
 
         if (typeof this.worker === 'undefined') {
-            this.worker = new Worker('./worker.ts')
-            this.stopped = false
+            this.start()
         }
 
         this.busy = true
 
-        this.worker.postMessage({
+        this.worker!.postMessage({
             fn: this.fn.toString(),
             args: args
         })
 
         return new Promise<T>((resolve, reject) => {
             // @ts-expect-error
-            this.worker.onmessage = async (event: MessageEvent) => {
+            this.worker!.onmessage = async (event: MessageEvent) => {
                 resolve(event.data)
                 if (this.autoStop) {
                     await this.stop()
@@ -77,7 +65,7 @@ export class Thread<T> {
                 this.busy = false
             }
             // @ts-expect-error
-            this.worker.onerror = async (event: MessageEvent) => {
+            this.worker!.onerror = async (event: MessageEvent) => {
                 reject(event.data)
                 if (this.autoStop) {
                     await this.stop()
