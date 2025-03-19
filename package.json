@@ -1,7 +1,7 @@
 {
   "name": "bun-threads",
   "author": "Taylor Reid",
-  "description": "Wrappers around Bun workers to enable working with them as promises.",
+  "description": "Abstraction around Bun workers to enable working with them as promises.",
   "version": "0.0.1",
   "homepage": "https://github.com/taylorsreid/bun-threadpool#readme",
   "repository": {
@@ -19,8 +19,12 @@
   ],
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "typedoc": "typedoc index.ts --exclude \"scratch.ts\" --html docs"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typedoc": "^0.28.0"
   },
   "peerDependencies": {
     "typescript": "^5"
