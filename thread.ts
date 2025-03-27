@@ -34,7 +34,7 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * A promise that resolves once the thread has finished its task and reached an idle state. Used by threadpools.
+     * A promise that resolves once the thread has finished its task and reached an idle state. Resolves immediately if the thread is not busy. Used by threadpools.
      * @example
      * const countUp: Thread<number> = new Thread<number>((countUpTo: number) => {
      *      let current: number = 0
