@@ -14,6 +14,7 @@ export class Thread<T = any> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
 
+    private _fn!: (...args: any) => T;
     /**
      * The callback function to be executed in parallel upon calling the .run(...args) method.
      * Argument types must be serializable using the structuredClone() algorithm.
@@ -21,7 +22,19 @@ export class Thread<T = any> extends EventEmitter {
      * They can however use dynamic imports.
      * @see [Structured Clone Algorithm - Supported Types - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types)
      */
-    public fn: (...args: any) => T
+    public get fn(): (...args: any) => T {
+        return this._fn;
+    }
+    public set fn(value: (...args: any) => T) {
+        // if the worker isn't closed, update the function
+        if (typeof this.worker !== 'undefined') {
+            this.worker.postMessage({
+                type: 'set',
+                data: value.toString()
+            })
+        }
+        this._fn = value;
+    }
 
     private _closeAfter!: number;
     /**
@@ -157,20 +170,22 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A Promise\<T\> where T is the return type of your callback function.
      */
     public async run(...args: any): Promise<T> {
-        clearTimeout(this.timer)
-        this._busy = true
-        this.emit('busy')
-
-        if (typeof this.worker === 'undefined') {
-            this.worker = new Worker('./worker.ts')
-        }
-
-        this.worker.postMessage({
-            fn: this.fn.toString(),
-            args: args
-        })
-
         return new Promise<T>((resolve, reject) => {
+            // reset automatic close timeout, mark thread as busy
+            clearTimeout(this.timer)
+            this.emit('busy')
+            this._busy = true
+
+            // check if the worker has closed, and if it has, create a new one and update the function
+            if (typeof this.worker === 'undefined') {
+                this.worker = new Worker('./worker.ts')
+                this.worker.postMessage({
+                    type: 'set',
+                    data: this.fn.toString()
+                })
+            }
+
+            // setup event listener
             // @ts-ignore
             this.worker.onmessage = async (event: MessageEvent) => {
                 if (event.data.type === 'success') {
@@ -182,9 +197,17 @@ export class Thread<T = any> extends EventEmitter {
                 else {
                     reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
                 }
-                this.emit('idle', event.data)
             }
-        }).finally(async () => {
+
+            // dispatch data to worker
+            this.worker.postMessage({
+                type: 'call',
+                data: args
+            })
+        })
+
+        // set up automatic shutdown if necessary, mark thread as idle
+        .finally(async () => {
             if (this.closeAfter === 0) {
                 await this.close()
             }
@@ -192,6 +215,7 @@ export class Thread<T = any> extends EventEmitter {
                 this.timer = setTimeout(async () => await this.close(), this.closeAfter)
             }
             this._busy = false
+            this.emit('idle')
         })
     }
 
