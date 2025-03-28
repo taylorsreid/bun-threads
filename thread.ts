@@ -170,20 +170,22 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A Promise\<T\> where T is the return type of your callback function.
      */
     public async run(...args: any): Promise<T> {
-        clearTimeout(this.timer)
-        this._busy = true
-        this.emit('busy')
-
-        // check if the worker has closed, and if it has, create a new one and update the function
-        if (typeof this.worker === 'undefined') {
-            this.worker = new Worker('./worker.ts')
-            this.worker.postMessage({
-                type: 'set',
-                data: this.fn.toString()
-            })
-        }
-
         return new Promise<T>((resolve, reject) => {
+            // reset automatic close timeout, mark thread as busy
+            clearTimeout(this.timer)
+            this.emit('busy')
+            this._busy = true
+
+            // check if the worker has closed, and if it has, create a new one and update the function
+            if (typeof this.worker === 'undefined') {
+                this.worker = new Worker('./worker.ts')
+                this.worker.postMessage({
+                    type: 'set',
+                    data: this.fn.toString()
+                })
+            }
+
+            // setup event listener
             // @ts-ignore
             this.worker.onmessage = async (event: MessageEvent) => {
                 if (event.data.type === 'success') {
@@ -195,13 +197,17 @@ export class Thread<T = any> extends EventEmitter {
                 else {
                     reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
                 }
-                this.emit('idle', event.data)
             }
-            this.worker!.postMessage({
+
+            // dispatch data to worker
+            this.worker.postMessage({
                 type: 'call',
                 data: args
             })
-        }).finally(async () => {
+        })
+
+        // set up automatic shutdown if necessary, mark thread as idle
+        .finally(async () => {
             if (this.closeAfter === 0) {
                 await this.close()
             }
@@ -209,6 +215,7 @@ export class Thread<T = any> extends EventEmitter {
                 this.timer = setTimeout(async () => await this.close(), this.closeAfter)
             }
             this._busy = false
+            this.emit('idle')
         })
     }
 
