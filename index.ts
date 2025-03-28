@@ -1,2 +1,2 @@
 export { Thread } from './thread'
-export { ThreadPool } from './threadpool'
+export { ThreadPool, availableParallelism } from './threadpool'
