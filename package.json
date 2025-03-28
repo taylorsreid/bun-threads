@@ -1,13 +1,15 @@
 {
   "name": "bun-threads",
-  "author": "Taylor Reid",
-  "description": "Abstraction around Bun workers to enable working with them as promises.",
   "version": "0.0.1",
-  "homepage": "https://github.com/taylorsreid/bun-threadpool#readme",
+  "author": "Taylor Reid",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/taylorsreid/bun-threadpool.git"
   },
+  "type": "module",
+  "module": "index.ts",
+  "description": "Abstraction around Bun workers to enable working with them as promises.",
+  "homepage": "https://github.com/taylorsreid/bun-threadpool#readme",
   "keywords": [
     "bun",
     "thread",
@@ -17,8 +19,6 @@
     "threading",
     "multithreading"
   ],
-  "module": "index.ts",
-  "type": "module",
   "scripts": {
     "typedoc": "typedoc index.ts --exclude \"scratch.ts\" --html docs"
   },
