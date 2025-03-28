@@ -130,7 +130,7 @@ export class Thread<T = any> extends EventEmitter {
     /**
      * Create a new Thread to run tasks on a separate Bun worker thread.
      * @param fn
-     * The callback function to be executed in parallel upon calling the .run(...args) method.
+     * The callback function to be executed in parallel upon calling the asynchronous .run(...args) method.
      * Argument types must be serializable using the structuredClone() algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports.
@@ -164,7 +164,7 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Execute the callback that was specified in the constructor in a separate worker thread.
+     * Execute the callback that was specified in the constructor and/or the .fn property in a separate worker thread.
      * @param args The arguments to pass to the callback function. Argument values must be serializable using the structuredClone() algorithm.
      * @see [Structured Clone Algorithm - Supported Types - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types)
      * @returns A Promise\<T\> where T is the return type of your callback function.
@@ -265,7 +265,7 @@ export class Thread<T = any> extends EventEmitter {
      * }
      * ```
      */
-    public on(eventName: 'idle', listener: (data: T) => void): this
+    public on(eventName: 'idle', listener: () => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `busy` event. This event fires every time a thread has begun its assigned task.
      * No checks are made to see if the `listener` has already been added.
@@ -354,7 +354,7 @@ export class Thread<T = any> extends EventEmitter {
      * console.log('working...')
      * ```
      */
-    public once(eventName: 'idle', listener: (data: T) => void): this
+    public once(eventName: 'idle', listener: () => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `busy`. The next time `busy` is triggered, this listener is removed and then invoked.
      * This event fires once a thread has begun its assigned task.
@@ -407,14 +407,14 @@ export class Thread<T = any> extends EventEmitter {
         return super.on(eventName, listener)
     }
 
-    public prependListener(eventName: 'idle', listener: (data: T) => void): this
+    public prependListener(eventName: 'idle', listener: () => void): this
     public prependListener(eventName: 'busy', listener: () => void): this
     public prependListener(eventName: 'close', listener: () => void): this
     public prependListener(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.prependListener(eventName, listener)
     }
 
-    public prependOnceListener(eventName: 'idle', listener: (data: T) => void): this
+    public prependOnceListener(eventName: 'idle', listener: () => void): this
     public prependOnceListener(eventName: 'busy', listener: () => void): this
     public prependOnceListener(eventName: 'close', listener: () => void): this
     public prependOnceListener<K>(eventName: string | symbol, listener: (...args: any) => void): this {
@@ -422,7 +422,7 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     // // only used in development for intellisense
-    // public emit(eventName: 'idle', data: T): boolean
+    // public emit(eventName: 'idle'): boolean
     // public emit(eventName: 'busy'): boolean
     // public emit(eventName: 'close'): boolean
     // public emit(eventName: string | symbol, ...args: any): boolean {
