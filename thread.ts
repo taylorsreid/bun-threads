@@ -14,6 +14,7 @@ export class Thread<T = any> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
 
+    private _fn!: (...args: any) => T;
     /**
      * The callback function to be executed in parallel upon calling the .run(...args) method.
      * Argument types must be serializable using the structuredClone() algorithm.
@@ -21,7 +22,19 @@ export class Thread<T = any> extends EventEmitter {
      * They can however use dynamic imports.
      * @see [Structured Clone Algorithm - Supported Types - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types)
      */
-    public fn: (...args: any) => T
+    public get fn(): (...args: any) => T {
+        return this._fn;
+    }
+    public set fn(value: (...args: any) => T) {
+        // if the worker isn't closed, update the function
+        if (typeof this.worker !== 'undefined') {
+            this.worker.postMessage({
+                type: 'set',
+                data: value.toString()
+            })
+        }
+        this._fn = value;
+    }
 
     private _closeAfter!: number;
     /**
@@ -161,14 +174,14 @@ export class Thread<T = any> extends EventEmitter {
         this._busy = true
         this.emit('busy')
 
+        // check if the worker has closed, and if it has, create a new one and update the function
         if (typeof this.worker === 'undefined') {
             this.worker = new Worker('./worker.ts')
+            this.worker.postMessage({
+                type: 'set',
+                data: this.fn.toString()
+            })
         }
-
-        this.worker.postMessage({
-            fn: this.fn.toString(),
-            args: args
-        })
 
         return new Promise<T>((resolve, reject) => {
             // @ts-ignore
@@ -184,6 +197,10 @@ export class Thread<T = any> extends EventEmitter {
                 }
                 this.emit('idle', event.data)
             }
+            this.worker!.postMessage({
+                type: 'call',
+                data: args
+            })
         }).finally(async () => {
             if (this.closeAfter === 0) {
                 await this.close()

@@ -8,28 +8,45 @@ declare var self: Worker;
 
 const AsyncFunction = async function () {}.constructor
 
+let isAsync: boolean
+let fn: Function
+
 // @ts-ignore
 self.onmessage = async (event: MessageEvent) => {
-    const funcString: string = event.data.fn
-    const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
-    const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
-    try {
+    if (event.data.type === 'set') {
+        const funcString: string = event.data.data
+        const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
+        const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
         if (funcString.startsWith('async')) {
-            postMessage({
-                type: 'success',
-                data: await AsyncFunction(...argNames, funcBody).call(undefined, ...event.data.args)
-            })
+            isAsync = true
+            fn = AsyncFunction(...argNames, funcBody)
         }
         else {
+            isAsync = false
+            fn = Function(...argNames, funcBody)
+        }
+    }
+    else if (event.data.type === 'call') {
+        try {
+            if (isAsync) {
+                postMessage({
+                    type: 'success',
+                    data: await fn.call(undefined, ...event.data.data)
+                })
+            }
+            else {
+                postMessage({
+                    type: 'success',
+                    data: fn.call(undefined, ...event.data.data)
+                })
+            }
+        } catch (error) {
             postMessage({
-                type: 'success',
-                data: Function(...argNames, funcBody).call(undefined, ...event.data.args)
+                type: 'failure',
+                data: error
             })
         }
-    } catch (error) {
-        postMessage({
-            type: 'failure',
-            data: error
-        })
     }
+
+    
 };
