@@ -47,6 +47,4 @@ self.onmessage = async (event: MessageEvent) => {
             })
         }
     }
-
-    
 };
