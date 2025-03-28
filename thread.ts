@@ -11,17 +11,49 @@ import { EventEmitter } from "events";
  * @author Taylor Reid
  */
 export class Thread<T = any> extends EventEmitter {
-
-    private fn: (...args: any) => T
-    private autoClose: boolean
     private worker: Worker | undefined
+    private timer: Timer | undefined
 
-    private _closed: boolean
+    /**
+     * The callback function to be executed in parallel upon calling the .run(...args) method.
+     * Argument types must be serializable using the structuredClone() algorithm.
+     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
+     * They can however use dynamic imports.
+     * @see [Structured Clone Algorithm - Supported Types - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types)
+     */
+    public fn: (...args: any) => T
+
+    private _closeAfter!: number;
+    /**
+     * How long in milliseconds to leave an inactive thread open before automatically terminating it.
+     * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
+     * The thread can still be closed manually by calling the asynchronous .close() method.
+     * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
+     * @default Infinity
+     */
+    public get closeAfter(): number {
+        return this._closeAfter;
+    }
+    public set closeAfter(value: number) {
+        if (value < 0) {
+            throw new RangeError(`closeAfter must be an integer between 0 (inclusive) and Infinity. Received ${value}`)
+        }
+        if (!this.closed) {
+            if (value === 0) {
+                this.close()
+            }
+            else if (value !== Infinity) {
+                this.timer = setTimeout(async () => await this.close(), this.closeAfter)
+            }
+        }
+        this._closeAfter = value;
+    }
+
     /**
      * Whether the threads underlying worker is currently instantiated or not.
      */
     public get closed(): boolean {
-        return this._closed
+        return typeof this.worker === 'undefined'
     }
 
     private _busy: boolean
@@ -102,19 +134,19 @@ export class Thread<T = any> extends EventEmitter {
      */
     constructor(fn: (...args: any) => T, options?: {
         /**
-         * Whether to terminate the worker thread automatically after .run(...args) has been called.
-         * This will free up the CPU core after finishing the task, but will increase startup times if the thread is reused.
+         * How long (in milliseconds) to leave an inactive thread open before automatically terminating it.
+         * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
          * The thread can still be closed manually by calling the asynchronous .close() method.
-         * @default false
+         * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
+         * @default Infinity
          */
-        autoClose?: boolean
+        closeAfter?: number
     }) {
         super()
         this.fn = fn
         options ??= {}
-        options.autoClose ??= false
-        this.autoClose = options.autoClose
-        this._closed = true
+        options.closeAfter ??= Infinity
+        this.closeAfter = options.closeAfter
         this._busy = false
     }
 
@@ -125,14 +157,13 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A Promise\<T\> where T is the return type of your callback function.
      */
     public async run(...args: any): Promise<T> {
+        clearTimeout(this.timer)
+        this._busy = true
+        this.emit('busy')
 
         if (typeof this.worker === 'undefined') {
             this.worker = new Worker('./worker.ts')
-            this._closed = false
         }
-
-        this._busy = true
-        this.emit('busy')
 
         this.worker.postMessage({
             fn: this.fn.toString(),
@@ -142,17 +173,23 @@ export class Thread<T = any> extends EventEmitter {
         return new Promise<T>((resolve, reject) => {
             // @ts-ignore
             this.worker.onmessage = async (event: MessageEvent) => {
-                resolve(event.data)
-                this.emit('idle', event.data)
-            }
-            // @ts-ignore
-            this.worker.onerror = async (event: MessageEvent) => {
-                reject(event.data)
+                if (event.data.type === 'success') {
+                    resolve(event.data.data)
+                }
+                else if (event.data.type === 'failure') {
+                    reject(event.data.data)
+                }
+                else {
+                    reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
+                }
                 this.emit('idle', event.data)
             }
         }).finally(async () => {
-            if (this.autoClose) {
+            if (this.closeAfter === 0) {
                 await this.close()
+            }
+            else if (this.closeAfter !== Infinity) {
+                this.timer = setTimeout(async () => await this.close(), this.closeAfter)
             }
             this._busy = false
         })
@@ -165,7 +202,6 @@ export class Thread<T = any> extends EventEmitter {
      */
     public async close(): Promise<boolean> {
         if (typeof this.worker !== 'undefined') {
-            this._closed = true
             this.emit('close')
             await this.worker.terminate() // Bun returns undefined instead of the status code. Upstream bug.
             this.worker = undefined
@@ -256,7 +292,7 @@ export class Thread<T = any> extends EventEmitter {
      *          newArr.push(oldArr.splice(rand, 1)[0]!)
      *      }
      *      return newArr.join('')
-     * }, { autoClose: true })
+     * }, { closeAfter: 60_000 })
      * 
      * scramble.on('close', () => {
      *      console.log('Scramble thread has completed its work and has closed.')
@@ -309,7 +345,7 @@ export class Thread<T = any> extends EventEmitter {
      *          arr.push(Math.round(Math.random() * (max - min) + min))
      *      }
      *      return arr
-     * }, { autoClose: true })
+     * }, { closeAfter: 10_000 })
      * 
      * generate.once('busy', () => {
      *      console.log('Thread is busy generating a random number array...')
@@ -336,7 +372,7 @@ export class Thread<T = any> extends EventEmitter {
      *          sum += i
      *      }
      *      return sum
-     * }, { autoClose: true })
+     * }, { closeAfter: 30_000 })
      * 
      * sumThread.once('close', () => console.log('sumThread has finished operation and is shutting down...'))
      * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))

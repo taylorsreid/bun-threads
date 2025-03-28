@@ -13,10 +13,23 @@ self.onmessage = async (event: MessageEvent) => {
     const funcString: string = event.data.fn
     const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
     const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
-    if (funcString.startsWith('async')) {
-        postMessage(await AsyncFunction(...argNames, funcBody).call(undefined, ...event.data.args))
-    }
-    else {
-        postMessage(Function(...argNames, funcBody).call(undefined, ...event.data.args))
+    try {
+        if (funcString.startsWith('async')) {
+            postMessage({
+                type: 'success',
+                data: await AsyncFunction(...argNames, funcBody).call(undefined, ...event.data.args)
+            })
+        }
+        else {
+            postMessage({
+                type: 'success',
+                data: Function(...argNames, funcBody).call(undefined, ...event.data.args)
+            })
+        }
+    } catch (error) {
+        postMessage({
+            type: 'failure',
+            data: error
+        })
     }
 };
