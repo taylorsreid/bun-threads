@@ -5,6 +5,17 @@
 
 import { EventEmitter } from "events";
 
+export interface ThreadOptions {
+    /**
+     * How long (in milliseconds) to leave an inactive thread open before automatically terminating it.
+     * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
+     * The thread can still be closed manually by calling the asynchronous .close() method.
+     * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
+     * @default Infinity
+     */
+    closeAfter?: number
+}
+
 /**
  * Abstraction around Bun workers to enable working with them as promises.
  * @typeParam T - The return type of your callback function. Defaults to any, but can be given a type to improve type checking and intellisense.
@@ -145,16 +156,7 @@ export class Thread<T = any> extends EventEmitter {
      * ```
      * @param options Configuration options for the thread.
      */
-    constructor(fn: (...args: any) => T, options?: {
-        /**
-         * How long (in milliseconds) to leave an inactive thread open before automatically terminating it.
-         * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
-         * The thread can still be closed manually by calling the asynchronous .close() method.
-         * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
-         * @default Infinity
-         */
-        closeAfter?: number
-    }) {
+    constructor(fn: (...args: any) => T, options?: ThreadOptions) {
         super()
         this.fn = fn
         options ??= {}
