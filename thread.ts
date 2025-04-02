@@ -53,6 +53,7 @@ export class Thread<T = any> extends EventEmitter {
      * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
      * The thread can still be closed manually by calling the asynchronous .close() method.
      * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
+     * Changing this value will restart the thread's internal timer.
      * @default Infinity
      */
     public get closeAfter(): number {
@@ -63,6 +64,7 @@ export class Thread<T = any> extends EventEmitter {
             throw new RangeError(`closeAfter must be an integer between 0 (inclusive) and Infinity. Received ${value}`)
         }
         if (!this.closed) {
+            clearTimeout(this.timer)
             if (value === 0) {
                 this.close()
             }
