@@ -13,7 +13,7 @@ export interface ThreadOptions {
      * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
      * @default Infinity
      */
-    closeAfter?: number
+    idleTimeout?: number
 }
 
 /**
@@ -47,7 +47,7 @@ export class Thread<T = any> extends EventEmitter {
         this._fn = value;
     }
 
-    private _closeAfter!: number;
+    private _idleTimeout!: number;
     /**
      * How long in milliseconds to leave an inactive thread open before automatically terminating it.
      * Closing the thread will free up the CPU core after finishing the task, but will increase startup times if the thread is reused later.
@@ -56,12 +56,12 @@ export class Thread<T = any> extends EventEmitter {
      * Changing this value will restart the thread's internal timer.
      * @default Infinity
      */
-    public get closeAfter(): number {
-        return this._closeAfter;
+    public get idleTimeout(): number {
+        return this._idleTimeout;
     }
-    public set closeAfter(value: number) {
+    public set idleTimeout(value: number) {
         if (value < 0) {
-            throw new RangeError(`closeAfter must be an integer between 0 (inclusive) and Infinity. Received ${value}`)
+            throw new RangeError(`idleTimeout must be an integer between 0 (inclusive) and Infinity. Received ${value}`)
         }
         if (!this.closed) {
             clearTimeout(this.timer)
@@ -69,10 +69,10 @@ export class Thread<T = any> extends EventEmitter {
                 this.close()
             }
             else if (value !== Infinity) {
-                this.timer = setTimeout(async () => await this.close(), this.closeAfter)
+                this.timer = setTimeout(async () => await this.close(), this.idleTimeout)
             }
         }
-        this._closeAfter = value;
+        this._idleTimeout = value;
     }
 
     /**
@@ -161,9 +161,7 @@ export class Thread<T = any> extends EventEmitter {
     constructor(fn: (...args: any) => T, options?: ThreadOptions) {
         super()
         this.fn = fn
-        options ??= {}
-        options.closeAfter ??= Infinity
-        this.closeAfter = options.closeAfter
+        this.idleTimeout = options?.idleTimeout ?? Infinity
         this._busy = false
     }
 
@@ -212,11 +210,11 @@ export class Thread<T = any> extends EventEmitter {
 
         // set up automatic shutdown if necessary, mark thread as idle
         .finally(async () => {
-            if (this.closeAfter === 0) {
+            if (this.idleTimeout === 0) {
                 await this.close()
             }
-            else if (this.closeAfter !== Infinity) {
-                this.timer = setTimeout(async () => await this.close(), this.closeAfter)
+            else if (this.idleTimeout !== Infinity) {
+                this.timer = setTimeout(async () => await this.close(), this.idleTimeout)
             }
             this._busy = false
             this.emit('idle')
@@ -320,7 +318,7 @@ export class Thread<T = any> extends EventEmitter {
      *          newArr.push(oldArr.splice(rand, 1)[0]!)
      *      }
      *      return newArr.join('')
-     * }, { closeAfter: 60_000 })
+     * }, { idleTimeout: 60_000 })
      * 
      * scramble.on('close', () => {
      *      console.log('Scramble thread has completed its work and has closed.')
@@ -373,7 +371,7 @@ export class Thread<T = any> extends EventEmitter {
      *          arr.push(Math.round(Math.random() * (max - min) + min))
      *      }
      *      return arr
-     * }, { closeAfter: 10_000 })
+     * }, { idleTimeout: 10_000 })
      * 
      * generate.once('busy', () => {
      *      console.log('Thread is busy generating a random number array...')
@@ -400,7 +398,7 @@ export class Thread<T = any> extends EventEmitter {
      *          sum += i
      *      }
      *      return sum
-     * }, { closeAfter: 30_000 })
+     * }, { idleTimeout: 30_000 })
      * 
      * sumThread.once('close', () => console.log('sumThread has finished operation and is shutting down...'))
      * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))
