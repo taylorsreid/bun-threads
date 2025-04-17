@@ -3,14 +3,14 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-declare var self: Worker;
+import { parentPort } from "worker_threads";
+
 const AsyncFunction = async function () {}.constructor
 let fn: Function
 
-// @ts-ignore
-self.onmessage = async (event: MessageEvent) => {
-    if (event.data.type === 'set') {
-        const funcString: string = event.data.data
+parentPort?.on('message', async (event: any) => {
+    if (event.type === 'set') {
+        const funcString: string = event.data
         const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
         const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
         if (funcString.startsWith('async')) {
@@ -20,17 +20,17 @@ self.onmessage = async (event: MessageEvent) => {
             fn = Function(...argNames, funcBody)
         }
     }
-    else if (event.data.type === 'call') {
+    else if (event.type === 'call') {
         try {
-            postMessage({
+            parentPort?.postMessage({
                 type: 'success',
-                data: await fn.call(undefined, ...event.data.data)
+                data: await fn.call(undefined, ...event.data)
             })
         } catch (error) {
-            postMessage({
+            parentPort?.postMessage({
                 type: 'failure',
                 data: error
             })
         }
     }
-};
+})

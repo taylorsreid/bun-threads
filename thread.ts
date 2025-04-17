@@ -4,6 +4,7 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import { EventEmitter } from "events";
+import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
@@ -24,6 +25,15 @@ export interface ThreadOptions {
 export class Thread<T = any> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
+
+    /**
+     * An integer identifier for the referenced thread. Inside the worker thread,
+     * it is available as `import { threadId } from 'node:worker_threads'`.
+     * This value is unique for each `Worker` instance inside a single process.
+     */
+    public get id(): number | undefined {
+        return this.worker?.threadId
+    }
 
     private _fn!: (...args: any) => T;
     /**
@@ -188,18 +198,17 @@ export class Thread<T = any> extends EventEmitter {
             }
 
             // setup event listener
-            // @ts-ignore
-            this.worker.onmessage = async (event: MessageEvent) => {
-                if (event.data.type === 'success') {
-                    resolve(event.data.data)
+            this.worker.once('message', (event: any) => {
+                if (event.type === 'success') {
+                    resolve(event.data)
                 }
-                else if (event.data.type === 'failure') {
-                    reject(event.data.data)
+                else if (event.type === 'failure') {
+                    reject(event.data)
                 }
                 else {
                     reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
                 }
-            }
+            })
 
             // dispatch data to worker
             this.worker.postMessage({
@@ -227,6 +236,7 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A boolean whether the underlying worker was actually terminated. True if the worker was terminated, false if the worker was already terminated (a no-op).
      */
     public async close(): Promise<boolean> {
+        clearTimeout(this.timer) // not clearing causes the program to hang and not exit
         if (typeof this.worker !== 'undefined') {
             this.emit('close')
             await this.worker.terminate() // Bun returns undefined instead of the status code. Upstream bug.
@@ -419,7 +429,7 @@ export class Thread<T = any> extends EventEmitter {
     public prependOnceListener(eventName: 'idle', listener: () => void): this
     public prependOnceListener(eventName: 'busy', listener: () => void): this
     public prependOnceListener(eventName: 'close', listener: () => void): this
-    public prependOnceListener<K>(eventName: string | symbol, listener: (...args: any) => void): this {
+    public prependOnceListener(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.prependOnceListener(eventName, listener)
     }
 
