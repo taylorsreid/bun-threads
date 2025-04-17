@@ -50,7 +50,7 @@ export class Thread<T = any> extends EventEmitter {
         // if the worker isn't closed, update the function
         if (typeof this.worker !== 'undefined') {
             this.worker.postMessage({
-                type: 'set',
+                action: 'set',
                 data: value.toString()
             })
         }
@@ -192,27 +192,35 @@ export class Thread<T = any> extends EventEmitter {
             if (typeof this.worker === 'undefined') {
                 this.worker = new Worker('./worker.ts')
                 this.worker.postMessage({
-                    type: 'set',
+                    action: 'set',
                     data: this.fn.toString()
                 })
             }
 
+            const id: string = Bun.randomUUIDv7()
+
+            const check = (event: any) => {
+                if (event.id === id) {
+                    if (event.action === 'resolve') {
+                        resolve(event.data)
+                    }
+                    else if (event.action === 'reject') {
+                        reject(event.data)
+                    }
+                    else {
+                        reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
+                    }
+                    this.worker!.removeListener('message', check)
+                }
+            }
+
             // setup event listener
-            this.worker.once('message', (event: any) => {
-                if (event.type === 'success') {
-                    resolve(event.data)
-                }
-                else if (event.type === 'failure') {
-                    reject(event.data)
-                }
-                else {
-                    reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
-                }
-            })
+            this.worker.on('message', check)
 
             // dispatch data to worker
             this.worker.postMessage({
-                type: 'call',
+                id: id,
+                action: 'call',
                 data: args
             })
         })

@@ -9,7 +9,7 @@ const AsyncFunction = async function () {}.constructor
 let fn: Function
 
 parentPort?.on('message', async (event: any) => {
-    if (event.type === 'set') {
+    if (event.action === 'set') {
         const funcString: string = event.data
         const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
         const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
@@ -20,15 +20,17 @@ parentPort?.on('message', async (event: any) => {
             fn = Function(...argNames, funcBody)
         }
     }
-    else if (event.type === 'call') {
+    else if (event.action === 'call') {
         try {
             parentPort?.postMessage({
-                type: 'success',
+                id: event.id,
+                action: 'resolve',
                 data: await fn.call(undefined, ...event.data)
             })
         } catch (error) {
             parentPort?.postMessage({
-                type: 'failure',
+                id: event.id,
+                action: 'reject',
                 data: error
             })
         }

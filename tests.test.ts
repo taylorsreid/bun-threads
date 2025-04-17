@@ -20,6 +20,13 @@ const add = (a: number, b: number) => {
 const subtract = (a: number, b: number) => {
     return a - b
 }
+const sum = (to: number) => {
+    let sum = 0
+    for (let i = 0; i < to; i++) {
+        sum += i
+    }
+    return sum
+}
 
 describe(Thread, () => {
     describe('.id', () => {
@@ -134,6 +141,18 @@ describe(Thread, () => {
             const thread = new Thread(() => { throw new Error('TEST ERROR') })
             expect(thread.run()).rejects.toThrowError('TEST ERROR')
             thread.close()
+        })
+        test('resolves only for the correct call', () => {
+            // commenting out the if (event.id === id) in run()'s internal check() function causes this test to fail
+            const thread = new Thread(sum)
+            const p1 = thread.run(1_000_000) // 499999500000
+            const p2 = thread.run(1_000) // 499500 
+            const p3 = thread.run(100) // 4950
+            const p4 = thread.run(10)  // 45
+            expect(p1).resolves.toBe(499999500000)
+            expect(p2).resolves.toBe(499500)
+            expect(p3).resolves.toBe(4950)
+            expect(p4).resolves.toBe(45)
         })
     })
     describe('.close()', () => {
