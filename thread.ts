@@ -8,9 +8,9 @@ import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
-     * How long (in milliseconds) to leave an inactive thread open before automatically terminating it.
-     * Closing the thread will free up the CPU core after finishing the task, but will slightly increase startup times if the thread is reused later.
-     * The thread can still be closed manually by calling the asynchronous {@link Thread["close"]()} method.
+     * How long (in milliseconds) to leave an inactive thread/threadpool open before automatically terminating it.
+     * Closing the thread/threadpool will free up the CPU core after finishing the task, but will slightly increase startup times if the thread/threadpool is reused later.
+     * The thread/threadpool can still be closed manually by calling the asynchronous `close()` method.
      * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
      * @default Infinity
      */
