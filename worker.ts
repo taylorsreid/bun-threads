@@ -10,10 +10,9 @@ let fn: Function
 
 parentPort?.on('message', async (event: any) => {
     if (event.action === 'set') {
-        const funcString: string = event.data
-        const argNames: string[] = funcString.substring(funcString.indexOf('(') + 1, funcString.indexOf(')')).split(',')
-        const funcBody: string = funcString.substring(funcString.indexOf('{') + 1, funcString.length-1).trim()
-        if (funcString.startsWith('async')) {
+        const argNames: string[] = event.data.substring(event.data.indexOf('(') + 1, event.data.indexOf(')')).split(',')
+        const funcBody: string = event.data.substring(event.data.indexOf('{') + 1, event.data.length-1).trim()
+        if (event.data.startsWith('async')) {
             fn = AsyncFunction(...argNames, funcBody)
         }
         else {
