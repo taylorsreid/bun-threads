@@ -8,12 +8,10 @@ import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
-     * How long (in milliseconds) to leave an inactive thread/threadpool open before automatically terminating it.
-     * Closing the thread/threadpool will free up the CPU core after finishing the task, but will slightly increase startup times if the thread/threadpool is reused later.
-     * The thread/threadpool can still be closed manually by calling the asynchronous `close()` method.
-     * Set this to 0 to close the thread/threadpool immediately after completing its task,
-     * or to Infinity (or leave undefined to default to Infinity) to leave the thread/threadpool open until it goes out of scope.
-     * @default Infinity
+     * How long (in milliseconds) to keep the thread or threadpool active after completing a task before terminating it.
+     * Keeping the thread or threadpool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
+     * Default is 0 (close immediately). Set to Infinity to keep the thread or threadpool open until closed manually.
+     * @default 0
      */
     idleTimeout?: number
 }
@@ -30,9 +28,10 @@ export class Thread<T = any> extends EventEmitter {
     /**
      * How many tasks are currently waiting to use the thread.
      * 
-     * Every time you call the {@link run()} method, this value is incremented by 1.
+     * Every time you call the {@link run run} method, this value is incremented by 1.
      * 
-     * Every time the {@link run()} method resolves to a value, this value is decremented by 1.
+     * Every time the {@link run run} method resolves to a value, this value is decremented by 1.
+     * @readonly
      */
     public get queued(): number {
         return this._queued;
@@ -42,14 +41,14 @@ export class Thread<T = any> extends EventEmitter {
             throw new RangeError(`Internal state 'queued' must be a value >= 0. Received: ${value}`)
         }
         else if (value === 0) {
-            this.emit('idle')
+            this.emit('idle', this)
             if (this.idleTimeout !== Infinity) {
                 this.timer = setTimeout(async () => await this.close(), this.idleTimeout)
             }
         }
         else if (this.queued === 0 && (value > 0)) {
             clearTimeout(this.timer)
-            this.emit('busy')
+            this.emit('busy', this)
         }
         this._queued = value;        
     }
@@ -71,7 +70,7 @@ export class Thread<T = any> extends EventEmitter {
 
     private _fn!: (...args: any) => T;
     /**
-     * The callback function to be executed in parallel upon calling the {@link run()} method.
+     * The callback function to be executed in parallel upon calling the asychronous {@link run run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports.
@@ -79,6 +78,12 @@ export class Thread<T = any> extends EventEmitter {
     public get fn(): (...args: any) => T {
         return this._fn;
     }
+    /**
+     * The callback function to be executed in parallel upon calling the asychronous {@link run run} method.
+     * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
+     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
+     * They can however use dynamic imports.
+     */
     public set fn(value: (...args: any) => T) {
         // if the worker isn't closed, update the function
         if (typeof this.worker !== 'undefined') {
@@ -92,17 +97,24 @@ export class Thread<T = any> extends EventEmitter {
 
     private _idleTimeout!: number;
     /**
-     * How long in milliseconds to leave an inactive thread open before automatically terminating it.
-     * Closing the thread will free up the CPU core after finishing the task, but will slightly increase startup times if the thread is reused later.
-     * The thread can still be closed manually by calling the asynchronous {@link close()} method.
-     * Set this to 0 to close the thread immediately after completing its task, or to Infinity (or leave undefined to default to Infinity) to leave the thread open until it goes out of scope.
+     * How long (in milliseconds) to keep the thread active after completing a task before terminating it.
+     * Keeping the thread open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is 0 (close immediately).  Set to Infinity to keep the thread or threadpool open until closed manually.
      * Changing this value will restart the thread's internal timer.
-     * @default Infinity
+     * @default 0
      * @throws `RangeError` if value < 0
      */
     public get idleTimeout(): number {
         return this._idleTimeout;
     }
+    /**
+     * How long (in milliseconds) to keep the thread active after completing a task before terminating it.
+     * Keeping the thread open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is 0 (close immediately).  Set to Infinity to keep the thread or threadpool open until closed manually.
+     * Changing this value will restart the thread's internal timer.
+     * @default 0
+     * @throws `RangeError` if value < 0
+     */
     public set idleTimeout(value: number) {
         if (value < 0) {
             throw new RangeError(`idleTimeout must be between 0 (inclusive) and Infinity. Received ${value}`)
@@ -117,29 +129,32 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Whether the threads underlying worker is currently instantiated or not.
+     * Whether the thread's underlying worker is currently instantiated or not.
      */
     public get closed(): boolean {
         return typeof this.worker === 'undefined'
     }
 
     /**
-     * A promise that resolves once the thread has finished its task and reached an idle state. Resolves immediately if the thread is not busy. Used by threadpools.
+     * A promise that resolves once the thread has finished its task and reached an idle state. Resolves immediately if the thread is not busy. Used internally by the ThreadPool class.
      * @example
+     * ```ts
+     * import { Thread } from './thread'
+     * 
      * const countUp: Thread<number> = new Thread<number>((countUpTo: number) => {
-     *      let current: number = 0
-     *      for (let i = 0; i <= countUpTo; i++) {
-     *          current = i
-     *      }
-     *      return current
+     *     let current: number = 0
+     *     for (let i = 0; i <= countUpTo; i++) {
+     *         current = i
+     *     }
+     *     return current
      * })
      * 
      * const countDown: Thread<number> = new Thread<number>((countDownFrom: number) => {
-     *      let current: number = countDownFrom
-     *      for (let i = countDownFrom; i >= 0; i--) {
-     *          current = i
-     *      }
-     *      return current
+     *     let current: number = countDownFrom
+     *     for (let i = countDownFrom; i >= 0; i--) {
+     *         current = i
+     *     }
+     *     return current
      * })
      * 
      * countUp.run(1_000_000)
@@ -147,19 +162,20 @@ export class Thread<T = any> extends EventEmitter {
      * 
      * // you can use the idle property to get the **thread** that finishes first, not the result
      * Promise.race([countUp.idle, countDown.idle]).then((winner: Thread<number>) => {
-     *      // do it again
-     *      winner.run(1_000_000).then(async (value: number) => {
-     *          if (value === 0) {
-     *              console.log('countDown was the winner')
-     *          }
-     *          else {
-     *              console.log('countUp was the winner')
-     *          }
-     *      }).then(() => {
-     *          countUp.close()
-     *          countDown.close()
-     *      })
+     *     // do it again
+     *     winner.run(1_000_000).then(async (value: number) => {
+     *         if (value === 0) {
+     *             console.log('countDown was the winner')
+     *         }
+     *         else {
+     *            console.log('countUp was the winner')
+     *         }
+     *     }).then(() => {
+     *         countUp.close()
+     *         countDown.close()
+     *     })
      * })
+     * ```
      */
     public get idle(): Promise<this> {
         return new Promise((resolve) => {
@@ -175,24 +191,26 @@ export class Thread<T = any> extends EventEmitter {
     /**
      * Create a new Thread to run tasks on a separate Bun worker thread.
      * @param fn
-     * The callback function to be executed in parallel upon calling the asynchronous {@link run()} method.
+     * The callback function to be executed in parallel upon calling the asynchronous {@link run run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports.
-     * @param options Configuration options for the thread.
+     * @param options a {@link ThreadOptions} configuration object for the thread.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const threadWithImports: Thread<Promise<void>> = new Thread(async (num: number) => {
-     *      const sqlite = await import('bun:sqlite')
-     *      const db = new sqlite.Database('./db.sqlite')
-     *      db.run("INSERT INTO answers VALUES(?)", [ num ])
+     *     const sqlite = await import('bun:sqlite')
+     *     const db = new sqlite.Database('./db.sqlite')
+     *     db.run("INSERT INTO answers VALUES(?)", [ num ])
      * })
      * ```
      */
     constructor(fn: (...args: any) => T, options?: ThreadOptions) {
         super()
         this.fn = fn
-        this.idleTimeout = options?.idleTimeout ?? Infinity
+        this.idleTimeout = options?.idleTimeout ?? 0
         this._queued = 0 // bypass setter to avoid emitting idle state
     }
 
@@ -253,14 +271,27 @@ export class Thread<T = any> extends EventEmitter {
 
     /**
      * Terminate the underlying worker. It is safe to call this method more than once, as subsequent calls result in a no-op.
-     * @param [force=false] false by default. This method will wait for the thread to finish its queued tasks unless `force` is set to true.
+     * @param [force=false] This method will wait for the thread to finish its queued tasks unless `force` is set to true. Default is false.
      * @see {@link busy}, {@link idle}, and/or {@link queued} on how to check first whether the thread has completed its task.
-     * @returns A boolean whether the underlying worker was actually terminated. True if the worker was terminated, false if the worker was already terminated (a no-op).
+     * @returns A Promise\<boolean\> that resolves to whether the underlying worker was actually terminated. True if the worker was terminated, false if the worker was already terminated (a no-op).
      * @example
      * ```ts
-     * const thread = new Thread(() => { return 42 })
-     * console.log('The answer is:', await thread.run())
-     * await thread.close() // not calling close() may cause the program to hang
+     * import { Thread } from './thread'
+     * 
+     * const waitThenReturn = async (str: string) => {
+     *     await Bun.sleep(100)
+     *     return str
+     * }
+     * 
+     * // this block will wait for the thread to finish its operation before closing, printing 'hello'
+     * const threadOne = new Thread(waitThenReturn)
+     * threadOne.run('hello').then((result) => console.log(result))
+     * threadOne.close() // force defaults to false
+     * 
+     * // this block will force the thread to close without waiting for it to finish its operation, 'world' never gets printed
+     * const threadTwo = new Thread(waitThenReturn)
+     * threadTwo.run('world').then((result) => console.log(result))
+     * threadTwo.close(true)
      * ```
      */
     public async close(force: boolean = false): Promise<boolean> {
@@ -269,7 +300,7 @@ export class Thread<T = any> extends EventEmitter {
                 await this.idle
             }
             clearTimeout(this.timer) // not clearing causes the program to hang and not exit
-            this.emit('close')
+            this.emit('close', this)
             await this.worker.terminate() // Bun returns undefined instead of the status code. Upstream bug.
             this.worker = undefined
             return true
@@ -278,7 +309,7 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Adds the `listener` function to the end of the listeners array for the `idle` event. This event fires every time a thread has completed its task and is ready for another run() call.
+     * Adds the `listener` function to the end of the listeners array for the `idle` event. This event fires every time a thread has completed all of its pending tasks.
      * No checks are made to see if the `listener` has already been added.
      * Multiple calls passing the same combination of `idle` and `listener` will result in the `listener` being added, and called, multiple times.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependListener()` method can be used as an alternative to add the
@@ -286,31 +317,33 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * const queue: number[][] = [ [1,2], [2,3], [3,4] ]
+     * import { Thread } from './thread'
      * 
-     * const thread: Thread<number> = new Thread<number>((a: number, b: number) => {
-     *      return a + b
+     * const helloWorld: Thread<string> = new Thread<string>(() => {
+     *     return 'hello world'
      * })
      * 
-     * thread.on('idle', async () => {
-     *      const next: number[] | undefined = queue.pop()
-     *      if (next) {
-     *          const result: number = await thread.run(next[0], next[1])
-     *          console.log(result)
-     *      }
+     * const add: Thread<number> = new Thread<number>((a: number, b: number) => {
+     *     return a + b
      * })
      * 
-     * const first: number[] | undefined = queue.pop()
-     * 
-     * if (first) {
-     *      const result: number = await thread.run(first[0], first[1])
-     *      console.log(result) // prints out 7, 5, 3 on separate lines
+     * const idleHandler = (thread: Thread) => {
+     *     console.log(`Thread ${thread.id} is now idle.`)
      * }
+     * 
+     * helloWorld.on('idle', idleHandler)
+     * add.on('idle', idleHandler)
+     * 
+     * helloWorld.run()
+     * add.run(1, 2)
+     * 
+     * helloWorld.close()
+     * add.close()
      * ```
      */
-    public on(eventName: 'idle', listener: () => void): this
+    public on(eventName: 'idle', listener: (thread: Thread) => void): this
     /**
-     * Adds the `listener` function to the end of the listeners array for the `busy` event. This event fires every time a thread has begun its assigned task.
+     * Adds the `listener` function to the end of the listeners array for the `busy` event. This event fires every time a thread has switched from an idle state to working on a task.
      * No checks are made to see if the `listener` has already been added.
      * Multiple calls passing the same combination of `busy` and `listener` will result in the `listener` being added, and called, multiple times.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependListener()` method can be used as an alternative to add the
@@ -318,26 +351,28 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const countOccurences: Thread<number> = new Thread<number>((char: string, inString: string) => {
-     *      let occurences: number = 0
-     *      for (let i = 0; i < inString.length; i++) {
-     *          if (inString[i] === char) {
-     *              occurences++
-     *          }
-     *      }
-     *      return occurences
+     *     let occurences: number = 0
+     *     for (let i = 0; i < inString.length; i++) {
+     *         if (inString[i] === char) {
+     *             occurences++
+     *         }
+     *     }
+     *     return occurences
      * })
      * 
      * countOccurences.on('busy', () => {
-     *      console.log('Begun counting occurences in a separate thread.')
+     *     console.log('Begun counting occurences in a separate thread.')
      * })
      * 
      * console.log(await countOccurences.run('o', 'hello world'))
      * console.log(await countOccurences.run('e', 'Answer to the Ultimate Question of Life, The Universe, and Everything'))
-     * await countOccurences.close()
+     * countOccurences.close()
      * ```
      */
-    public on(eventName: 'busy', listener: () => void): this
+    public on(eventName: 'busy', listener: (thread: Thread) => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `close` event. This event fires when a thread has closed its underlying worker object.
      * A thread can still be reused by calling run() again, but will have longer startup times vs. not closing it before calling run() again, as a worker has to be created again after closing.
@@ -348,83 +383,87 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const scramble: Thread<string> = new Thread<string>((toScramble: string) => {
-     *      const randomNumber = (min: number, max: number) => {
-     *          return Math.random() * (max - min) + min;
-     *      }
-     *      const oldArr: string[] = toScramble.split('')
-     *      const newArr: string[] = []
-     *      while (oldArr.length > 0) {
-     *          const rand: number = randomNumber(0, oldArr.length)
-     *          newArr.push(oldArr.splice(rand, 1)[0]!)
-     *      }
-     *      return newArr.join('')
-     * }, { idleTimeout: 60_000 })
+     *     const randomNumber = (min: number, max: number) => {
+     *         return Math.random() * (max - min) + min;
+     *     }
+     *     const oldArr: string[] = toScramble.split('')
+     *     const newArr: string[] = []
+     *     while (oldArr.length > 0) {
+     *         const rand: number = randomNumber(0, oldArr.length)
+     *         newArr.push(oldArr.splice(rand, 1)[0]!)
+     *     }
+     *     return newArr.join('')
+     * }, { idleTimeout: 500 })
      * 
      * scramble.on('close', () => {
-     *      console.log('Scramble thread has completed its work and has closed.')
+     *     console.log(`Scramble thread has completed its work and has closed after its idleTimeout of ${scramble.idleTimeout} milliseconds.`)
      * })
      * 
      * console.log(await scramble.run('hello world')) // outputs a randomly rearranged 'hello world'
      * ```
      */
-    public on(eventName: 'close', listener: () => void): this
+    public on(eventName: 'close', listener: (thread: Thread) => void): this
     public on(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
 
     /**
      * Adds a **one-time** `listener` function for the event named `idle`. The next time `idle` is triggered, this listener is removed and then invoked.
-     * This event fires once a thread has completed its task and is ready for another run() call. The return value of the operation is also included for convenience and as an alternative to using promises.
+     * This event fires every time a thread has completed all of its pending tasks.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependOnceListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const reverse: Thread<string> = new Thread<string>((longStringtoReverse: string) => {
-     *      return longStringtoReverse.split('').toReversed().join('')
+     *     return longStringtoReverse.split('').toReversed().join('')
      * })
      * 
-     * reverse.once('idle', (data: string) => {
-     *      console.log(`The reversed string is ${data}`)
-     *      reverse.close()
-     * })
+     * reverse.once('idle', () => console.log('Reverse thread is now idling.'))
      * 
      * // not awaited because the data is handled in the once listener
      * reverse.run('Answer to the Ultimate Question of Life, The Universe, and Everything')
      * console.log('doing some other work in the meantime...')
      * console.log('working...')
      * console.log('working...')
+     * reverse.close()
      * ```
      */
-    public once(eventName: 'idle', listener: () => void): this
+    public once(eventName: 'idle', listener: (thread: Thread) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `busy`. The next time `busy` is triggered, this listener is removed and then invoked.
-     * This event fires once a thread has begun its assigned task.
+     * This event fires every time a thread has switched from an idle state to working on a task.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependOnceListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const generate: Thread<number[]> = new Thread<number[]>((length: number, min: number = 0, max: number = 100) => {
-     *      const arr: number[] = []
-     *      for (let i = 0; i < length; i++) {
-     *          arr.push(Math.round(Math.random() * (max - min) + min))
-     *      }
-     *      return arr
-     * }, { idleTimeout: 10_000 })
+     *     const arr: number[] = []
+     *     for (let i = 0; i < length; i++) {
+     *         arr.push(Math.round(Math.random() * (max - min) + min))
+     *     }
+     *     return arr
+     * }, { idleTimeout: 0 })
      * 
      * generate.once('busy', () => {
-     *      console.log('Thread is busy generating a random number array...')
+     *     console.log('Thread is busy generating a random number array...')
      * })
      * 
      * generate.run(100).then((result: number[]) => {
-     *      console.log(result)
+     *     console.log(result)
      * })
      * console.log('Doing other work in the meantime...')
      * ```
      */
-    public once(eventName: 'busy', listener: () => void): this
+    public once(eventName: 'busy', listener: (thread: Thread) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `close`. The next time `close` is triggered, this listener is removed and then invoked.
      * This event fires once when a thread has closed its underlying worker object.
@@ -433,41 +472,37 @@ export class Thread<T = any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
+     * import { Thread } from './thread'
+     * 
      * const sumThread: Thread<number> = new Thread<number>((start: number, end: number) => {
-     *      let sum: number = 0
-     *      for (let i = start; i <= end; i++) {
-     *          sum += i
-     *      }
-     *      return sum
-     * }, { idleTimeout: 30_000 })
+     *     let sum: number = 0
+     *     for (let i = start; i <= end; i++) {
+     *         sum += i
+     *     }
+     *     return sum
+     * }, { idleTimeout: 0 })
      * 
      * sumThread.once('close', () => console.log('sumThread has finished operation and is shutting down...'))
      * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))
      * ```
      */
-    public once(eventName: 'close', listener: () => void): this
+    public once(eventName: 'close', listener: (thread: Thread) => void): this
     public once(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
 
-    public prependListener(eventName: 'idle', listener: () => void): this
-    public prependListener(eventName: 'busy', listener: () => void): this
-    public prependListener(eventName: 'close', listener: () => void): this
-    public prependListener(eventName: string | symbol, listener: (...args: any) => void): this {
+    public prependListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread) => void): this {
         return super.prependListener(eventName, listener)
     }
 
-    public prependOnceListener(eventName: 'idle', listener: () => void): this
-    public prependOnceListener(eventName: 'busy', listener: () => void): this
-    public prependOnceListener(eventName: 'close', listener: () => void): this
-    public prependOnceListener(eventName: string | symbol, listener: (...args: any) => void): this {
+    public prependOnceListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread) => void): this {
         return super.prependOnceListener(eventName, listener)
     }
 
-    // // only used in development for intellisense
-    // public emit(eventName: 'idle'): boolean
-    // public emit(eventName: 'busy'): boolean
-    // public emit(eventName: 'close'): boolean
+    // only used in development for intellisense
+    // public emit(eventName: 'idle', thread: Thread): boolean
+    // public emit(eventName: 'busy', thread: Thread): boolean
+    // public emit(eventName: 'close', thread: Thread): boolean
     // public emit(eventName: string | symbol, ...args: any): boolean {
     //     return super.emit(eventName, ...args)
     // }
