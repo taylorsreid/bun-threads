@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
 import { Thread } from "./thread";
-import { DEFAULT_IDLE_TIMEOUT, ThreadPool } from './threadpool';
+import { ThreadPool } from './threadpool';
 
 const helloWorld = () => {
     return 'hello world'
@@ -54,8 +54,9 @@ describe(Thread, () => {
     })
     describe('.idleTimeout', () => {
         test('initializes', () => {
-            expect(new Thread(helloWorld).idleTimeout).toBe(Infinity)
+            expect(new Thread(helloWorld).idleTimeout).toBe(0)
             expect(new Thread(helloWorld, { idleTimeout: 60_000 }).idleTimeout).toBe(60_000)
+            expect(new Thread(helloWorld, { idleTimeout: Infinity }).idleTimeout).toBe(Infinity)
         })
         test('is mutable', () => {
             const thread = new Thread(helloWorld)
@@ -177,7 +178,7 @@ describe(ThreadPool, () => {
             const tp = new ThreadPool(helloWorld)
             expect(tp['threads']).toBeArrayOfSize(tp.maxThreads)
             expect(tp['threads'][0]?.idleTimeout).toBe(Infinity)
-            expect(tp['threads'][tp['threads'].length - 1]?.idleTimeout).toBeOneOf([Infinity, DEFAULT_IDLE_TIMEOUT])
+            expect(tp['threads'][tp['threads'].length - 1]?.idleTimeout).toBeOneOf([Infinity, 0])
             tp.close()
         })
     })
@@ -320,7 +321,7 @@ describe(ThreadPool, () => {
         describe('initializes', () => {
             test('default', () => {
                 const tp = new ThreadPool(helloWorld)
-                expect(tp.idleTimeout).toBe(DEFAULT_IDLE_TIMEOUT)
+                expect(tp.idleTimeout).toBe(0)
                 tp.close()
             })
             test('custom', () => {
@@ -335,12 +336,46 @@ describe(ThreadPool, () => {
                     minThreads: 1,
                     maxThreads: 2
                 })
-                expect(tp['threads'][1]?.idleTimeout).toBe(DEFAULT_IDLE_TIMEOUT)
+                expect(tp['threads'][1]?.idleTimeout).toBe(0)
                 tp.idleTimeout = 12345
                 expect(tp['threads'][0]?.idleTimeout).toBe(Infinity)
                 expect(tp['threads'][1]?.idleTimeout).toBe(12345)
                 tp.close()
             })
+        })
+    })
+    describe('.busy', () => {
+        test('initializes', () => {
+            expect(new ThreadPool(helloWorld).busy).toBe(0)
+        })
+        test('increases', () => {
+            const tp = new ThreadPool(helloWorld)
+            tp.run()
+            expect(tp.busy).toBe(1)
+            tp.run()
+            expect(tp.busy).toBe(2)
+            tp.close()
+        })
+        test('decreases', async () => {
+            const tp = new ThreadPool(helloWorld)
+            for (let i = 0; i < tp.maxThreads; i++) {
+                tp.run()
+            }
+            expect(tp.busy).toBe(tp.maxThreads)
+            await tp.idle
+            expect(tp.busy).toBe(0)
+        })
+    })
+    describe('.idle', () => {
+        test('resolves when idle', () => {
+            expect(new ThreadPool(helloWorld).idle).resolves.toBe(undefined)
+        })
+        test('mutates', async () => {
+            const tp = new ThreadPool(helloWorld)
+            const promise = tp.run()
+            expect(Bun.peek.status(promise)).toBe('pending')
+            await promise
+            expect(Bun.peek.status(promise)).toBe('fulfilled')
         })
     })
     describe('.run()', () => {
