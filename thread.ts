@@ -8,9 +8,9 @@ import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
-     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
-     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
-     * Default is 0 (close immediately). Set to Infinity to keep the Thread or ThreadPool open until closed manually.
+     * How long (in milliseconds) to keep the {@link Thread} or {@link ThreadPool} active after completing a task before terminating it.
+     * Keeping the `Thread` or `ThreadPool` open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
+     * Default is `0` (close immediately).
      * @default 0
      */
     idleTimeout?: number
@@ -18,7 +18,7 @@ export interface ThreadOptions {
 
 /**
  * Abstraction around Bun workers to enable working with them as promises.
- * @typeParam T - The return type of your callback function. Defaults to any, but can be given a type to improve type checking and intellisense.
+ * @typeParam T - The return type of your callback function. Defaults to `any`, but can be given a type to improve type checking and intellisense.
  */
 export class Thread<T = any> extends EventEmitter {
     private worker: Worker | undefined
@@ -28,9 +28,9 @@ export class Thread<T = any> extends EventEmitter {
     /**
      * How many tasks are currently waiting to use the thread.
      * 
-     * Every time you call the {@link run run} method, this value is incremented by 1.
+     * Every time you call the {@link run} method, this value is incremented by 1.
      * 
-     * Every time the {@link run run} method resolves to a value, this value is decremented by 1.
+     * Every time the `run` method resolves to a value, this value is decremented by 1.
      * @readonly
      */
     public get queued(): number {
@@ -54,15 +54,15 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Whether the thread is currently busy running a task or not. It is possible the check this while a task is still running.
-     * The status is stored on the main thread while the task is performed on the underlying worker. To wait until the thread is not busy, await the {@link idle} property.
+     * Whether the `Thread` is currently busy running a task or not. It is possible the check this while a task is still running.
+     * The status is stored on the main thread while the task is performed on the underlying worker. To wait until the `Thread` is not busy, await the {@link idle} property.
      */
     public get busy(): boolean {
         return this.queued > 0
     }
 
     /**
-     * A unique integer identifier for the referenced thread. May be undefined if the underlying worker is currently closed.
+     * A unique integer identifier for the referenced `Thread`. May be `undefined` if the underlying worker is currently closed.
      */
     public get id(): number | undefined {
         return this.worker?.threadId
@@ -70,19 +70,19 @@ export class Thread<T = any> extends EventEmitter {
 
     private _fn!: (...args: any) => T;
     /**
-     * The callback function to be executed in parallel upon calling the asychronous {@link run run} method.
+     * The callback function to be executed in parallel upon calling the asychronous {@link run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
-     * They can however use dynamic imports.
+     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker environment.
+     * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
     public get fn(): (...args: any) => T {
         return this._fn;
     }
     /**
-     * The callback function to be executed in parallel upon calling the asychronous {@link run run} method.
+     * The callback function to be executed in parallel upon calling the asychronous {@link run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
-     * They can however use dynamic imports.
+     * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
     public set fn(value: (...args: any) => T) {
         // if the worker isn't closed, update the function
@@ -97,10 +97,10 @@ export class Thread<T = any> extends EventEmitter {
 
     private _idleTimeout!: number;
     /**
-     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
-     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
-     * Default is 0 (close immediately).  Set to Infinity to keep the Thread or ThreadPool open until closed manually.
-     * Changing this value will restart the Thread or ThreadPool's internal timer.
+     * How long (in milliseconds) to keep the `Thread` active after completing a task before terminating it.
+     * Keeping the `Thread` open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is `0` (close immediately).  Set to `Infinity` to keep the `Thread` open until closed manually.
+     * Changing this value will restart the `Thread`'s internal timer.
      * @default 0
      * @throws `RangeError` if value < 0
      */
@@ -108,10 +108,10 @@ export class Thread<T = any> extends EventEmitter {
         return this._idleTimeout;
     }
     /**
-     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
-     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
-     * Default is 0 (close immediately).  Set to Infinity to keep the Thread or ThreadPool open until closed manually.
-     * Changing this value will restart the Thread or ThreadPool's internal timer.
+     * How long (in milliseconds) to keep the `Thread` active after completing a task before terminating it.
+     * Keeping the `Thread` open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is `0` (close immediately).  Set to `Infinity` to keep the `Thread` open until closed manually.
+     * Changing this value will restart the `Thread`'s internal timer.
      * @default 0
      * @throws `RangeError` if value < 0
      */
@@ -129,14 +129,14 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Whether the thread's underlying worker is currently instantiated or not.
+     * Whether the `Thread`'s underlying worker is currently instantiated or not.
      */
     public get closed(): boolean {
         return typeof this.worker === 'undefined'
     }
 
     /**
-     * A promise that resolves once the thread has finished its task and reached an idle state. Resolves immediately if the thread is not busy. Used internally by the ThreadPool class.
+     * A promise that resolves once the `Thread` has finished its task and reached an idle state. Resolves immediately if the `Thread` is not busy. Used internally by the {@link ThreadPool} class.
      * @example
      * ```ts
      * import { Thread } from './thread'
@@ -189,12 +189,12 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Create a new Thread to run tasks on a separate Bun worker thread.
+     * Create a new `Thread` to run tasks on a separate Bun worker thread.
      * @param fn
-     * The callback function to be executed in parallel upon calling the asynchronous {@link run run} method.
+     * The callback function to be executed in parallel upon calling the asynchronous {@link run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
-     * They can however use dynamic imports.
+     * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      * @param options a {@link ThreadOptions} configuration object for the thread.
      * @example
      * ```ts
@@ -215,10 +215,10 @@ export class Thread<T = any> extends EventEmitter {
     }
 
     /**
-     * Execute the callback that was specified in the constructor and/or the .fn property, in a separate worker thread.
+     * Execute the callback that was specified in the {@link constructor} and/or the {@link fn} property in a separate worker thread.
      * @param args The arguments to pass to the callback function.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * @returns A Promise\<T\> where T is the return type of your callback function.
+     * @returns A Promise\<T\> where `T` is the return type of your callback function.
      */
     public async run(...args: any): Promise<T> {
         return new Promise<T>((resolve, reject) => {
@@ -271,9 +271,9 @@ export class Thread<T = any> extends EventEmitter {
 
     /**
      * Terminate the underlying worker. It is safe to call this method more than once, as subsequent calls result in a no-op.
-     * @param [force=false] This method will wait for the thread to finish its queued tasks unless `force` is set to true. Default is false.
+     * @param [force=false] This method will wait for the `Thread` to finish its queued tasks unless `force` is set to true. Default is `false`.
      * @see {@link busy}, {@link idle}, and/or {@link queued} on how to check first whether the thread has completed its task.
-     * @returns A Promise\<boolean\> that resolves to whether the underlying worker was actually terminated. True if the worker was terminated, false if the worker was already terminated (a no-op).
+     * @returns A Promise\<boolean\> that resolves to whether the underlying worker was actually terminated. `true` if the worker was terminated, `false` if the worker was already terminated (a no-op).
      * @example
      * ```ts
      * import { Thread } from './thread'
@@ -283,12 +283,12 @@ export class Thread<T = any> extends EventEmitter {
      *     return str
      * }
      * 
-     * // this block will wait for the thread to finish its operation before closing, printing 'hello'
+     * // this code will wait for the thread to finish its operation before closing, printing 'hello'
      * const threadOne = new Thread(waitThenReturn)
      * threadOne.run('hello').then((result) => console.log(result))
      * threadOne.close() // force defaults to false
      * 
-     * // this block will force the thread to close without waiting for it to finish its operation, 'world' never gets printed
+     * // this code will force the thread to close without waiting for it to finish its operation, 'world' never gets printed
      * const threadTwo = new Thread(waitThenReturn)
      * threadTwo.run('world').then((result) => console.log(result))
      * threadTwo.close(true)
