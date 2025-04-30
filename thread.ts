@@ -8,9 +8,9 @@ import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
-     * How long (in milliseconds) to keep the thread or threadpool active after completing a task before terminating it.
-     * Keeping the thread or threadpool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
-     * Default is 0 (close immediately). Set to Infinity to keep the thread or threadpool open until closed manually.
+     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
+     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
+     * Default is 0 (close immediately). Set to Infinity to keep the Thread or ThreadPool open until closed manually.
      * @default 0
      */
     idleTimeout?: number
@@ -97,10 +97,10 @@ export class Thread<T = any> extends EventEmitter {
 
     private _idleTimeout!: number;
     /**
-     * How long (in milliseconds) to keep the thread active after completing a task before terminating it.
-     * Keeping the thread open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
-     * Default is 0 (close immediately).  Set to Infinity to keep the thread or threadpool open until closed manually.
-     * Changing this value will restart the thread's internal timer.
+     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
+     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is 0 (close immediately).  Set to Infinity to keep the Thread or ThreadPool open until closed manually.
+     * Changing this value will restart the Thread or ThreadPool's internal timer.
      * @default 0
      * @throws `RangeError` if value < 0
      */
@@ -108,10 +108,10 @@ export class Thread<T = any> extends EventEmitter {
         return this._idleTimeout;
     }
     /**
-     * How long (in milliseconds) to keep the thread active after completing a task before terminating it.
-     * Keeping the thread open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
-     * Default is 0 (close immediately).  Set to Infinity to keep the thread or threadpool open until closed manually.
-     * Changing this value will restart the thread's internal timer.
+     * How long (in milliseconds) to keep the Thread or ThreadPool active after completing a task before terminating it.
+     * Keeping the Thread or ThreadPool open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link close} method is not called.
+     * Default is 0 (close immediately).  Set to Infinity to keep the Thread or ThreadPool open until closed manually.
+     * Changing this value will restart the Thread or ThreadPool's internal timer.
      * @default 0
      * @throws `RangeError` if value < 0
      */
