@@ -257,7 +257,7 @@ export class Thread<T = any> extends EventEmitter {
                                     parentPort?.postMessage({
                                         id: event.id,
                                         action: 'reject',
-                                        data: error
+                                        data: error instanceof ReferenceError ? new ReferenceError(error.message + \`.\nThis is usually caused by referencing top level imports within your Thread's callback function.\nOnly dynamic imports made inside of the Thread's callback function are supported.\nPlease see the README for examples.\`) : error
                                     })
                                 }
                             }
