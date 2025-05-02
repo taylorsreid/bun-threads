@@ -1,6 +1,6 @@
 {
   "name": "bun-threads",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Taylor Reid",
   "license": "MIT",
   "repository": {
@@ -21,7 +21,7 @@
     "multithreading"
   ],
   "scripts": {
-    "build": "bun build --entrypoints ./index.ts ./worker.ts --outdir ./dist --target bun --sourcemap=linked && tsc && rm dist/worker.d.ts && cp package.json dist/package.json && cp LICENSE dist/LICENSE",
+    "build": "bun build --entrypoints ./index.ts ./worker.ts --outdir ./dist --target bun --sourcemap=linked && tsc && rm dist/worker.d.ts && cp package.json dist/package.json && cp README.md dist/README.md && cp LICENSE dist/LICENSE",
     "typedoc": "typedoc index.ts --exclude \"scratch.ts\" --html docs"
   },
   "devDependencies": {
