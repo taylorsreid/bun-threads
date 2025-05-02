@@ -8,6 +8,7 @@ import { parentPort } from "worker_threads";
 const AsyncFunction = async function () { }.constructor
 let fn: Function
 
+// TODO: switch to native Bun Worker API once it becomes stable
 parentPort?.on('message', async (event: any) => {
     if (event.action === 'set') {
         const argNames: string[] = event.data.substring(event.data.indexOf('(') + 1, event.data.indexOf(')')).split(',')
