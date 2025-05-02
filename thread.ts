@@ -18,7 +18,7 @@ export interface ThreadOptions {
 
 /**
  * Abstraction around Bun workers to enable working with them as promises.
- * @typeParam T - The return type of your callback function. Defaults to `any`, but can be given a type to improve type checking and intellisense.
+ * @typeParam T - The signature of your callback function, including its arguments and return type.
  */
 export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
     private worker: Worker | undefined
@@ -68,32 +68,10 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
         return this.worker?.threadId
     }
 
-    private _fn!: T;
     /**
      * The callback function to be executed in parallel upon calling the asychronous {@link run} method.
-     * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker environment.
-     * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
-    public get fn(): T {
-        return this._fn;
-    }
-    /**
-     * The callback function to be executed in parallel upon calling the asychronous {@link run} method.
-     * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
-     * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
-     */
-    public set fn(value: T) {
-        // if the worker isn't closed, update the function
-        if (typeof this.worker !== 'undefined') {
-            this.worker.postMessage({
-                action: 'set',
-                data: value.toString()
-            })
-        }
-        this._fn = value;
-    }
+    public readonly fn: T;
 
     private _idleTimeout!: number;
     /**
@@ -141,7 +119,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const countUp: Thread<number> = new Thread<number>((countUpTo: number) => {
+     * const countUp = new Thread((countUpTo: number) => {
      *     let current: number = 0
      *     for (let i = 0; i <= countUpTo; i++) {
      *         current = i
@@ -149,7 +127,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      *     return current
      * })
      * 
-     * const countDown: Thread<number> = new Thread<number>((countDownFrom: number) => {
+     * const countDown = new Thread((countDownFrom: number) => {
      *     let current: number = countDownFrom
      *     for (let i = countDownFrom; i >= 0; i--) {
      *         current = i
@@ -157,13 +135,13 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      *     return current
      * })
      * 
-     * countUp.run(1_000_000)
-     * countDown.run(1_000_000)
+     * countUp.run([1_000_000])
+     * countDown.run([1_000_000])
      * 
      * // you can use the idle property to get the **thread** that finishes first, not the result
-     * Promise.race([countUp.idle, countDown.idle]).then((winner: Thread<number>) => {
+     * Promise.race([countUp.idle, countDown.idle]).then((winner) => {
      *     // do it again
-     *     winner.run(1_000_000).then(async (value: number) => {
+     *     winner.run([1_000_000]).then(async (value: number) => {
      *         if (value === 0) {
      *             console.log('countDown was the winner')
      *         }
@@ -200,7 +178,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const threadWithImports: Thread<Promise<void>> = new Thread(async (num: number) => {
+     * const threadWithImports = new Thread(async (num: number) => {
      *     const sqlite = await import('bun:sqlite')
      *     const db = new sqlite.Database('./db.sqlite')
      *     db.run("INSERT INTO answers VALUES(?)", [ num ])
@@ -215,15 +193,13 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
     }
 
     /**
-     * Execute the callback that was specified in the {@link constructor} and/or the {@link fn} property in a separate worker thread.
-     * @param args The arguments to pass to the callback function.
+     * Execute the callback that was specified in the {@link constructor} in a separate worker thread.
+     * @param args A tuple of the arguments to pass to the callback function.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * @returns A Promise\<T\> where `T` is the return type of your callback function.
+     * @returns A Promise\<ReturnType\<T\>\> that resolves to the return type of your callback function.
      */
     public async run(args: Parameters<T>): Promise<ReturnType<T>> {
         return new Promise<ReturnType<T>>((resolve, reject) => {
-            // increment the current task queue number, this has the side effect of emitting busy and idle, and resetting the idle timeout when appropriate
-            this.queued++
 
             // check if the worker has closed, and if it has, create a new one and update the function
             if (typeof this.worker === 'undefined') {
@@ -233,6 +209,9 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
                     data: this.fn.toString()
                 })
             }
+
+            // increment the current task queue number, this has the side effect of emitting busy and idle, and resetting the idle timeout when appropriate
+            this.queued++
 
             // create a unique id for each request to ensure that each promise only resolves for the correct request
             const id: string = Bun.randomUUIDv7()
@@ -285,12 +264,12 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * 
      * // this code will wait for the thread to finish its operation before closing, printing 'hello'
      * const threadOne = new Thread(waitThenReturn)
-     * threadOne.run('hello').then((result) => console.log(result))
+     * threadOne.run(['hello']).then((result) => console.log(result))
      * threadOne.close() // force defaults to false
      * 
      * // this code will force the thread to close without waiting for it to finish its operation, 'world' never gets printed
      * const threadTwo = new Thread(waitThenReturn)
-     * threadTwo.run('world').then((result) => console.log(result))
+     * threadTwo.run(['world']).then((result) => console.log(result))
      * threadTwo.close(true)
      * ```
      */
@@ -319,23 +298,23 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const helloWorld: Thread<string> = new Thread<string>(() => {
+     * const helloWorld = new Thread(() => {
      *     return 'hello world'
      * })
      * 
-     * const add: Thread<number> = new Thread<number>((a: number, b: number) => {
+     * const add = new Thread((a: number, b: number) => {
      *     return a + b
      * })
      * 
-     * const idleHandler = (thread: Thread) => {
+     * const idleHandler = (thread: Thread<any>) => {
      *     console.log(`Thread ${thread.id} is now idle.`)
      * }
      * 
      * helloWorld.on('idle', idleHandler)
      * add.on('idle', idleHandler)
      * 
-     * helloWorld.run()
-     * add.run(1, 2)
+     * helloWorld.run([])
+     * add.run([1, 2])
      * 
      * helloWorld.close()
      * add.close()
@@ -353,7 +332,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const countOccurences: Thread<number> = new Thread<number>((char: string, inString: string) => {
+     * const countOccurences = new Thread((char: string, inString: string) => {
      *     let occurences: number = 0
      *     for (let i = 0; i < inString.length; i++) {
      *         if (inString[i] === char) {
@@ -367,8 +346,8 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      *     console.log('Begun counting occurences in a separate thread.')
      * })
      * 
-     * console.log(await countOccurences.run('o', 'hello world'))
-     * console.log(await countOccurences.run('e', 'Answer to the Ultimate Question of Life, The Universe, and Everything'))
+     * console.log(await countOccurences.run(['o', 'hello world']))
+     * console.log(await countOccurences.run(['e', 'Answer to the Ultimate Question of Life, The Universe, and Everything']))
      * countOccurences.close()
      * ```
      */
@@ -385,7 +364,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const scramble: Thread<string> = new Thread<string>((toScramble: string) => {
+     * const scramble = new Thread((toScramble: string) => {
      *     const randomNumber = (min: number, max: number) => {
      *         return Math.random() * (max - min) + min;
      *     }
@@ -402,7 +381,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      *     console.log(`Scramble thread has completed its work and has closed after its idleTimeout of ${scramble.idleTimeout} milliseconds.`)
      * })
      * 
-     * console.log(await scramble.run('hello world')) // outputs a randomly rearranged 'hello world'
+     * console.log(await scramble.run(['hello world'])) // outputs a randomly rearranged 'hello world'
      * ```
      */
     public on(eventName: 'close', listener: (thread: Thread<T>) => void): this
@@ -420,14 +399,13 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const reverse: Thread<string> = new Thread<string>((longStringtoReverse: string) => {
+     * const reverse = new Thread((longStringtoReverse: string) => {
      *     return longStringtoReverse.split('').toReversed().join('')
      * })
      * 
      * reverse.once('idle', () => console.log('Reverse thread is now idling.'))
      * 
-     * // not awaited because the data is handled in the once listener
-     * reverse.run('Answer to the Ultimate Question of Life, The Universe, and Everything')
+     * reverse.run(['Answer to the Ultimate Question of Life, The Universe, and Everything']).then((result) => console.log('Reversed:', result))
      * console.log('doing some other work in the meantime...')
      * console.log('working...')
      * console.log('working...')
@@ -445,7 +423,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const generate: Thread<number[]> = new Thread<number[]>((length: number, min: number = 0, max: number = 100) => {
+     * const generate = new Thread((length: number, min: number = 0, max: number = 100) => {
      *     const arr: number[] = []
      *     for (let i = 0; i < length; i++) {
      *         arr.push(Math.round(Math.random() * (max - min) + min))
@@ -453,13 +431,9 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      *     return arr
      * }, { idleTimeout: 0 })
      * 
-     * generate.once('busy', () => {
-     *     console.log('Thread is busy generating a random number array...')
-     * })
+     * generate.once('busy', () => console.log('Thread is busy generating a random number array...'))
      * 
-     * generate.run(100).then((result: number[]) => {
-     *     console.log(result)
-     * })
+     * generate.run([100]).then((result: number[]) => console.log(result))
      * console.log('Doing other work in the meantime...')
      * ```
      */
@@ -474,7 +448,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * ```ts
      * import { Thread } from './thread'
      * 
-     * const sumThread: Thread<number> = new Thread<number>((start: number, end: number) => {
+     * const sumThread = new Thread((start: number, end: number) => {
      *     let sum: number = 0
      *     for (let i = start; i <= end; i++) {
      *         sum += i
@@ -483,7 +457,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * }, { idleTimeout: 0 })
      * 
      * sumThread.once('close', () => console.log('sumThread has finished operation and is shutting down...'))
-     * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))
+     * sumThread.run([0, 1_000_000]).then((sum: number) => console.log(sum))
      * ```
      */
     public once(eventName: 'close', listener: (thread: Thread<T>) => void): this
