@@ -11,8 +11,22 @@ let fn: Function
 // TODO: switch to native Bun Worker API once it becomes stable
 parentPort?.on('message', async (event: any) => {
     if (event.action === 'set') {
+
+        // Get the names of the arguments passed in.
         const argNames: string[] = event.data.substring(event.data.indexOf('(') + 1, event.data.indexOf(')')).split(',')
-        const funcBody: string = event.data.substring(event.data.indexOf('{') + 1, event.data.length - 1).trim()
+
+        let funcBody: string
+
+        if ((event.data as string).endsWith('}')) { // it's a function
+            // chop off the starting and ending brackets
+            funcBody = (event.data as string).substring((event.data as string).indexOf('{') + 1, event.data.length - 1).trim()
+        }
+        else { // it's an expression
+            // chop off the '() =>' or 'async () =>' then make it into a function that just returns the expression
+            funcBody = 'return ' + (event.data as string).substring((event.data as string).indexOf('=>') + 2).trim()
+        }
+
+        // determine if it's a synchronous or asynchronous function
         if (event.data.startsWith('async')) {
             fn = AsyncFunction(...argNames, funcBody)
         }
@@ -31,8 +45,23 @@ parentPort?.on('message', async (event: any) => {
             parentPort?.postMessage({
                 id: event.id,
                 action: 'reject',
-                data: error instanceof ReferenceError ? new ReferenceError(error.message + `.\nThis is usually caused by referencing top level imports within your Thread's callback function.\nOnly dynamic imports made inside of the Thread's callback function are supported.\nPlease see the README for examples.`) : error
+                data: function(){ // return more helpful error messages for common errors
+                    if (error instanceof ReferenceError) {
+                        return new ReferenceError(error.message + `.\nThis is usually caused by referencing top level imports within your Thread or ThreadPool's callback function.\nOnly dynamic imports made inside of the Thread's callback function are supported.\nPlease see the README for examples.`)
+                    }
+                    else if (error instanceof TypeError && error.message === 'Spread syntax requires ...iterable not be null or undefined'){
+                        return new TypeError(error.message + `.\nThis is usually caused by not passing an argument to Thread.run() or ThreadPool.run().\nIf your callback function does not have arguments, you still must pass an empty array.\nThis is required for TypeScript to be able infer arguments.`)
+                    }
+                    return error
+                }()
             })
         }
+    }
+    else {
+        parentPort?.postMessage({
+            id: event.id,
+            action: 'reject',
+            data: new Error(`An unexpected error occured within the worker. Instruction "${event.action}" from main thread is not defined in this context.`)
+        })
     }
 })
