@@ -11,9 +11,6 @@ import { ThreadPool } from './threadpool';
 const helloWorld = () => {
     return 'hello world'
 }
-const goodbyeWorld = () => {
-    return 'goodbye world'
-}
 const add = (a: number, b: number) => {
     return a + b
 }
@@ -43,13 +40,6 @@ describe(Thread, () => {
     describe('.fn', () => {
         test('initializes', () => {
             expect(new Thread(helloWorld, { idleTimeout: 0 }).fn).toBeFunction()
-        })
-        test('is mutable', () => {
-            const thread = new Thread(add)
-            expect(thread.run([5, 2])).resolves.toBe(7)
-            thread.fn = subtract
-            expect(thread.run([5, 2])).resolves.toBe(3)
-            thread.close()
         })
     })
     describe('.idleTimeout', () => {
@@ -192,16 +182,6 @@ describe(ThreadPool, () => {
             expect(tp['threads'][1]?.fn).toBe(helloWorld)
             tp.close()
         })
-        test('mutates', async () => {
-            const tp = new ThreadPool(helloWorld, {
-                maxThreads: 2
-            })
-            tp.fn = goodbyeWorld
-            expect(tp.fn).toBe(goodbyeWorld)
-            expect(tp['threads'][0]?.fn).toBe(goodbyeWorld)
-            expect(tp['threads'][1]?.fn).toBe(goodbyeWorld)
-            tp.close()
-        })
     })
     describe('.minthreads', () => {
         describe('initializes', () => {
@@ -258,7 +238,7 @@ describe(ThreadPool, () => {
         describe('initializes', () => {
             test('default', () => {
                 const tp = new ThreadPool(helloWorld)
-                expect(tp.maxThreads).toBe(availableParallelism())
+                expect(tp.maxThreads).toBe(availableParallelism() - 1)
                 tp.close()
             })
             test('custom', () => {

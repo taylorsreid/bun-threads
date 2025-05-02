@@ -17,7 +17,7 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * A pool of available threads that can be called to run a task multiple times in parallel.
  * 
  * The following example demonstrates the benefits of using the ThreadPool class over a single {@link Thread} class:
- * @typeParam T - The return type of your callback function. Defaults to any, but can be given a type to improve type checking and intellisense.
+ * @typeParam T - The signature of your callback function, including its arguments and return type.
  * @example
  * ```ts
  * import { Thread } from "./thread";
@@ -32,18 +32,18 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * 
  * let start = performance.now()
  * await Promise.all([,
- *     thread.run(1_000),
- *     thread.run(1_000),
- *     thread.run(1_000)
+ *     thread.run([1_000]),
+ *     thread.run([1_000]),
+ *     thread.run([1_000])
  * ])
  * // a single Thread can only execute synchronous tasks one at a time
  * console.log('Thread completed in:', performance.now() - start, 'ms') // ~ 3000 ms
  * 
  * start = performance.now()
  * await Promise.all([,
- *     threadPool.run(1_000),
- *     threadPool.run(1_000),
- *     threadPool.run(1_000)
+ *     threadPool.run([1_000]),
+ *     threadPool.run([1_000]),
+ *     threadPool.run([1_000])
  * ])
  * // ThreadPool runs each task in a separate Thread in parallel
  * console.log('ThreadPool completed in:', performance.now() - start, 'ms') // ~ 1000 ms
@@ -55,18 +55,8 @@ export interface ThreadPoolOptions extends ThreadOptions {
 export class ThreadPool<T extends (...args: any[]) => any> {
     private threads: Thread<T>[]
 
-    private _fn: T
     /** {@inheritDoc Thread.fn} */
-    public get fn(): T {
-        return this._fn
-    }
-    /** {@inheritDoc Thread.fn} */
-    public set fn(value: T) {
-        for (let i = 0; i < this.threads.length; i++) {
-            this.threads[i]!.fn = value
-        }
-        this._fn = value
-    }
+    public readonly fn: T
 
     private _minThreads!: number
     /**
@@ -116,20 +106,20 @@ export class ThreadPool<T extends (...args: any[]) => any> {
 
     private _maxThreads!: number
     /**
-     * The maximum number of {@link Thread Threads} that are allowed to be running at once. Once this limit is reached, any further calls will be enqueued until a `Thread` becomes available.
-     * By default, the maximum is set to {@link https://nodejs.org/api/os.html#osavailableparallelism os.availableParallelism()}, which generally should not be exceeded, as it should not offer any performance gains.
+     * The maximum number of {@link Thread Threads} that are allowed to be running at once. Once this limit is reached, any further calls will be enqueued in a promise until a `Thread` becomes available.
+     * By default, the maximum is set to {@link https://nodejs.org/api/os.html#osavailableparallelism os.availableParallelism()} - 1, which generally should not be exceeded, as it should not offer any performance gains.
      * Setting this value to less than {@link minThreads} will cause `minThreads` to be lowered to the same value.
-     * @default os.availableParallelism()
+     * @default os.availableParallelism() - 1
      * @throws `RangeError` if value < 1 or if value is not an integer
      */
     public get maxThreads(): number {
         return this._maxThreads
     }
     /**
-     * The maximum number of {@link Thread Threads} that are allowed to be running at once. Once this limit is reached, any further calls will be enqueued until a `Thread` becomes available.
-     * By default, the maximum is set to {@link https://nodejs.org/api/os.html#osavailableparallelism os.availableParallelism()}, which generally should not be exceeded, as it should not offer any performance gains.
+     * The maximum number of {@link Thread Threads} that are allowed to be running at once. Once this limit is reached, any further calls will be enqueued in a promise until a `Thread` becomes available.
+     * By default, the maximum is set to {@link https://nodejs.org/api/os.html#osavailableparallelism os.availableParallelism()} - 1, which generally should not be exceeded, as it should not offer any performance gains.
      * Setting this value to less than {@link minThreads} will cause `minThreads` to be lowered to the same value.
-     * @default os.availableParallelism()
+     * @default os.availableParallelism() - 1
      * @throws `RangeError` if value < 1 or if value is not an integer
      */
     public set maxThreads(value: number) {
@@ -154,7 +144,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
 
     private _idleTimeout!: number;
     /**
-     * How long (in milliseconds) to keep the variable {@link Thread Threads} in the `ThreadPool` active after completing a task before terminating them.
+     * How long (in milliseconds) to keep the dynamic {@link Thread Threads} in the `ThreadPool` active after completing a task before terminating them.
      * {@link minThreads} number of `Thread`s have their {@link Thread.idleTimeout} set to `Infinity`. All other threads will have their `Thread.idleTimeout` set to this value.
      * This allows the `ThreadPool` to grow and shrink based upon demand, using more or less resources as required.
      * Default is `0` (close immediately).
@@ -166,7 +156,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         return this._idleTimeout;
     }
     /**
-     * How long (in milliseconds) to keep the variable {@link Thread Threads} in the `ThreadPool` active after completing a task before terminating them.
+     * How long (in milliseconds) to keep the dynamic {@link Thread Threads} in the `ThreadPool` active after completing a task before terminating them.
      * {@link minThreads} number of `Thread`s have their {@link Thread.idleTimeout} set to `Infinity`. All other threads will have their `Thread.idleTimeout` set to this value.
      * This allows the `ThreadPool` to grow and shrink based upon demand, using more or less resources as required.
      * Default is `0` (close immediately).
@@ -192,13 +182,13 @@ export class ThreadPool<T extends (...args: any[]) => any> {
      *     return 'hello world'
      * })
      * 
-     * tp.run()
+     * tp.run([])
      * console.log(`${tp.busy} thread in the ThreadPool is busy.`)
-     * tp.run()
+     * tp.run([])
      * console.log(`${tp.busy} threads in the ThreadPool are busy.`)
      * await tp.idle
      * console.log(`${tp.busy} threads in the ThreadPool are busy.`)
-     * await tp.close()
+     * tp.close()
      * ```
      */
     public get busy(): number {
@@ -228,7 +218,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
 
         this.threads = []
         this.minThreads = options?.minThreads ?? 1
-        this.maxThreads = options?.maxThreads ?? availableParallelism()
+        this.maxThreads = options?.maxThreads ?? availableParallelism() - 1
         this.idleTimeout = options?.idleTimeout ?? 0
         
         for (let i: number = 0; i < this.minThreads; i++) {
@@ -237,7 +227,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         for (let i = this.minThreads; i < this.maxThreads; i++) {
             this.threads[i] = new Thread<T>(fn, { idleTimeout: this.idleTimeout })
         }
-        this._fn = fn
+        this.fn = fn
     }
 
     /** {@inheritDoc Thread.run} */
@@ -277,7 +267,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
      * import { ThreadPool } from "./threadpool"
      * 
      * const threadPool = new ThreadPool(() => { return 42 })
-     * console.log('The answer is:', await threadPool.run())
+     * console.log('The answer is:', await threadPool.run([]))
      * threadPool.close() // not calling close may cause the program to hang
      * ```
      */
