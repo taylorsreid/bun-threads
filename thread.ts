@@ -117,7 +117,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * A promise that resolves once the `Thread` has finished its task and reached an idle state. Resolves immediately if the `Thread` is not busy. Used internally by the {@link ThreadPool} class.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const countUp = new Thread((countUpTo: number) => {
      *     let current: number = 0
@@ -176,7 +176,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @param options a {@link ThreadOptions} configuration object for the thread.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const threadWithImports = new Thread(async (num: number) => {
      *     const sqlite = await import('bun:sqlite')
@@ -255,7 +255,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A Promise\<boolean\> that resolves to whether the underlying worker was actually terminated. `true` if the worker was terminated, `false` if the worker was already terminated (a no-op).
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const waitThenReturn = async (str: string) => {
      *     await Bun.sleep(100)
@@ -296,7 +296,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const helloWorld = new Thread(() => {
      *     return 'hello world'
@@ -330,7 +330,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const countOccurences = new Thread((char: string, inString: string) => {
      *     let occurences: number = 0
@@ -362,7 +362,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const scramble = new Thread((toScramble: string) => {
      *     const randomNumber = (min: number, max: number) => {
@@ -397,7 +397,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const reverse = new Thread((longStringtoReverse: string) => {
      *     return longStringtoReverse.split('').toReversed().join('')
@@ -421,7 +421,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const generate = new Thread((length: number, min: number = 0, max: number = 100) => {
      *     const arr: number[] = []
@@ -446,7 +446,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * @returns A reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
-     * import { Thread } from './thread'
+     * import { Thread } from "bun-threads";
      * 
      * const sumThread = new Thread((start: number, end: number) => {
      *     let sum: number = 0

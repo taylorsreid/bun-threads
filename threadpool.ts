@@ -20,8 +20,7 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * @typeParam T - The signature of your callback function, including its arguments and return type.
  * @example
  * ```ts
- * import { Thread } from "./thread";
- * import { ThreadPool } from "./threadpool";
+ * import { Thread, ThreadPool } from "bun-threads";
  * 
  * const thread = new Thread((wait: number) => {
  *     Bun.sleepSync(wait) // simulate some synchronous work
@@ -177,7 +176,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
      * To wait until the `ThreadPool` is not busy, await the {@link idle} property.
      * @example
      * ```ts
-     * import { ThreadPool } from "./threadpool";
+     * import { ThreadPool } from "bun-threads";
      * const tp = new ThreadPool(() => {
      *     return 'hello world'
      * })
@@ -264,7 +263,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
      * @returns a Promise\<number\> that resolves to the amount of open threads that were actually closed (how many `Thread.close()` calls returned `true`).
      * @example
      * ```ts
-     * import { ThreadPool } from "./threadpool"
+     * import { ThreadPool } from "bun-threads";
      * 
      * const threadPool = new ThreadPool(() => { return 42 })
      * console.log('The answer is:', await threadPool.run([]))
