@@ -22,12 +22,8 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * ```ts
  * import { Thread, ThreadPool } from "bun-threads";
  * 
- * const thread = new Thread((wait: number) => {
- *     Bun.sleepSync(wait) // simulate some synchronous work
- * })
- * const threadPool = new ThreadPool((wait: number) => {
- *     Bun.sleepSync(wait) // simulate some synchronous work
- * })
+ * const thread = new Thread((wait: number) => Bun.sleepSync(wait)) // simulate some synchronous work
+ * const threadPool = new ThreadPool((wait: number) => Bun.sleepSync(wait)) // simulate some synchronous work
  * 
  * let start = performance.now()
  * await Promise.all([,

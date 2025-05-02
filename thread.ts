@@ -194,7 +194,9 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
 
     /**
      * Execute the callback that was specified in the {@link constructor} in a separate worker thread.
-     * @param args A tuple of the arguments to pass to the callback function.
+     * @param args An array of arguments to pass to the callback function.
+     * If your callback function does not have arguments, you still must pass an empty array.
+     * This is required for TypeScript to be able infer arguments.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * @returns A Promise\<ReturnType\<T\>\> that resolves to the return type of your callback function.
      */
@@ -228,7 +230,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
                         reject(event.data)
                     }
                     else {
-                        reject(new Error('An unexpected error occured within the worker. This may indicate a bug in bun-threads.'))
+                        reject(new Error(`An unexpected error occured within the Thread class. Instruction "${event.action}" from worker thread is not defined in this context.`))
                     }
 
                     // decrement the task queue number
