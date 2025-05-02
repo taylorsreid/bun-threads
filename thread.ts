@@ -20,7 +20,7 @@ export interface ThreadOptions {
  * Abstraction around Bun workers to enable working with them as promises.
  * @typeParam T - The return type of your callback function. Defaults to `any`, but can be given a type to improve type checking and intellisense.
  */
-export class Thread<T = any> extends EventEmitter {
+export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
 
@@ -68,14 +68,14 @@ export class Thread<T = any> extends EventEmitter {
         return this.worker?.threadId
     }
 
-    private _fn!: (...args: any) => T;
+    private _fn!: T;
     /**
      * The callback function to be executed in parallel upon calling the asychronous {@link run} method.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker environment.
      * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
-    public get fn(): (...args: any) => T {
+    public get fn(): T {
         return this._fn;
     }
     /**
@@ -84,7 +84,7 @@ export class Thread<T = any> extends EventEmitter {
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
-    public set fn(value: (...args: any) => T) {
+    public set fn(value: T) {
         // if the worker isn't closed, update the function
         if (typeof this.worker !== 'undefined') {
             this.worker.postMessage({
@@ -207,7 +207,7 @@ export class Thread<T = any> extends EventEmitter {
      * })
      * ```
      */
-    constructor(fn: (...args: any) => T, options?: ThreadOptions) {
+    constructor(fn: T, options?: ThreadOptions) {
         super()
         this.fn = fn
         this.idleTimeout = options?.idleTimeout ?? 0
@@ -220,8 +220,8 @@ export class Thread<T = any> extends EventEmitter {
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * @returns A Promise\<T\> where `T` is the return type of your callback function.
      */
-    public async run(...args: any): Promise<T> {
-        return new Promise<T>((resolve, reject) => {
+    public async run(args: Parameters<T>): Promise<ReturnType<T>> {
+        return new Promise<ReturnType<T>>((resolve, reject) => {
             // increment the current task queue number, this has the side effect of emitting busy and idle, and resetting the idle timeout when appropriate
             this.queued++
 
@@ -341,7 +341,7 @@ export class Thread<T = any> extends EventEmitter {
      * add.close()
      * ```
      */
-    public on(eventName: 'idle', listener: (thread: Thread) => void): this
+    public on(eventName: 'idle', listener: (thread: Thread<T>) => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `busy` event. This event fires every time a thread has switched from an idle state to working on a task.
      * No checks are made to see if the `listener` has already been added.
@@ -372,7 +372,7 @@ export class Thread<T = any> extends EventEmitter {
      * countOccurences.close()
      * ```
      */
-    public on(eventName: 'busy', listener: (thread: Thread) => void): this
+    public on(eventName: 'busy', listener: (thread: Thread<T>) => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `close` event. This event fires when a thread has closed its underlying worker object.
      * A thread can still be reused by calling run() again, but will have longer startup times vs. not closing it before calling run() again, as a worker has to be created again after closing.
@@ -405,7 +405,7 @@ export class Thread<T = any> extends EventEmitter {
      * console.log(await scramble.run('hello world')) // outputs a randomly rearranged 'hello world'
      * ```
      */
-    public on(eventName: 'close', listener: (thread: Thread) => void): this
+    public on(eventName: 'close', listener: (thread: Thread<T>) => void): this
     public on(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
@@ -434,7 +434,7 @@ export class Thread<T = any> extends EventEmitter {
      * reverse.close()
      * ```
      */
-    public once(eventName: 'idle', listener: (thread: Thread) => void): this
+    public once(eventName: 'idle', listener: (thread: Thread<T>) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `busy`. The next time `busy` is triggered, this listener is removed and then invoked.
      * This event fires every time a thread has switched from an idle state to working on a task.
@@ -463,7 +463,7 @@ export class Thread<T = any> extends EventEmitter {
      * console.log('Doing other work in the meantime...')
      * ```
      */
-    public once(eventName: 'busy', listener: (thread: Thread) => void): this
+    public once(eventName: 'busy', listener: (thread: Thread<T>) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `close`. The next time `close` is triggered, this listener is removed and then invoked.
      * This event fires once when a thread has closed its underlying worker object.
@@ -486,23 +486,23 @@ export class Thread<T = any> extends EventEmitter {
      * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))
      * ```
      */
-    public once(eventName: 'close', listener: (thread: Thread) => void): this
+    public once(eventName: 'close', listener: (thread: Thread<T>) => void): this
     public once(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
 
-    public prependListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread) => void): this {
+    public prependListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T>) => void): this {
         return super.prependListener(eventName, listener)
     }
 
-    public prependOnceListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread) => void): this {
+    public prependOnceListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T>) => void): this {
         return super.prependOnceListener(eventName, listener)
     }
 
     // only used in development for intellisense
-    // public emit(eventName: 'idle', thread: Thread): boolean
-    // public emit(eventName: 'busy', thread: Thread): boolean
-    // public emit(eventName: 'close', thread: Thread): boolean
+    // public emit(eventName: 'idle', thread: Thread<T>): boolean
+    // public emit(eventName: 'busy', thread: Thread<T>): boolean
+    // public emit(eventName: 'close', thread: Thread<T>): boolean
     // public emit(eventName: string | symbol, ...args: any): boolean {
     //     return super.emit(eventName, ...args)
     // }
