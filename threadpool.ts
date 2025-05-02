@@ -52,16 +52,16 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * threadPool.close()
  * ```
  */
-export class ThreadPool<T = any> {
+export class ThreadPool<T extends (...args: any[]) => any> {
     private threads: Thread<T>[]
 
-    private _fn: (...args: any) => T
+    private _fn: T
     /** {@inheritDoc Thread.fn} */
-    public get fn(): (...args: any) => T {
+    public get fn(): T {
         return this._fn
     }
     /** {@inheritDoc Thread.fn} */
-    public set fn(value: (...args: any) => T) {
+    public set fn(value: T) {
         for (let i = 0; i < this.threads.length; i++) {
             this.threads[i]!.fn = value
         }
@@ -224,7 +224,7 @@ export class ThreadPool<T = any> {
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
-    constructor(fn: (...args: any) => T, options?: ThreadPoolOptions) {
+    constructor(fn: T, options?: ThreadPoolOptions) {
 
         this.threads = []
         this.minThreads = options?.minThreads ?? 1
@@ -241,7 +241,7 @@ export class ThreadPool<T = any> {
     }
 
     /** {@inheritDoc Thread.run} */
-    public async run(...args: any): Promise<T> {
+    public async run(args: Parameters<T>): Promise<ReturnType<T>> {
 
         // run through a decision tree to select which thread to use, prevents just reusing the same thread over and over
         let winner: Thread<T> | undefined
@@ -265,7 +265,7 @@ export class ThreadPool<T = any> {
             }))
         }
 
-        return winner.run(...args)
+        return winner.run(args)
     }
 
     /**
