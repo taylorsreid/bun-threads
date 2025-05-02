@@ -1,6 +1,6 @@
 # bun-threads
 
-## A TypeScript Library to Simplify Bun Worker Threads 🧵
+## Multithreading for the Bun Runtime Made Simple 🧵
 bun-threads is a lightweight, developer-friendly TypeScript library for Bun that makes it effortless to offload tasks into separate worker threads. It wraps worker threads and messaging with a clean, promise-based interface and type support, enabling easy parallel processing without any boilerplate or separate worker files. bun-threads makes writing multithreaded JavaScript and TypeScript feel more like writing the asynchronous single threaded code that you are used to.
 
 ## 🔧 Features
@@ -26,6 +26,11 @@ bun-threads is a lightweight, developer-friendly TypeScript library for Bun that
         97 expect() calls
         
         Ran 51 tests across 1 files. [744.00ms]
+
+## Installation
+```bash
+bun add bun-threads
+```
 
 ## ❓ FAQ
 ### Why not just use one of the existing libraries that does this like workerpool, multithreading<span>.</span>io, tinypool, poolifier, threads.js, etc?
