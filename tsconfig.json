@@ -7,12 +7,15 @@
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
+    "outDir": "dist",
 
     // Bundler mode
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true,
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
 
     // Best practices
     "strict": true,
@@ -26,5 +29,6 @@
     "noPropertyAccessFromIndexSignature": false,
     "noImplicitReturns": true,
     "allowUnreachableCode": false
-  }
+  },
+  "exclude": ["dist", "docs", "*.test.ts", "scratch.ts"]
 }
