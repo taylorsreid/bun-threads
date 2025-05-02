@@ -28,7 +28,7 @@ const sum = (to: number) => {
 describe(Thread, () => {
     describe('.id', () => {
         test('initializes undefined', () => {
-            expect(new Thread(helloWorld, { idleTimeout: 0 }).id).toBeUndefined()
+            expect(new Thread(helloWorld).id).toBeUndefined()
         })
         test('mutates to integer', async () => {
             const thread = new Thread(helloWorld)
@@ -39,7 +39,7 @@ describe(Thread, () => {
     })
     describe('.fn', () => {
         test('initializes', () => {
-            expect(new Thread(helloWorld, { idleTimeout: 0 }).fn).toBeFunction()
+            expect(new Thread(helloWorld).fn).toBeFunction()
         })
     })
     describe('.idleTimeout', () => {
@@ -113,12 +113,22 @@ describe(Thread, () => {
     })
     describe('.run()', () => {
         test('is on a separate thread', () => {
-            expect(new Thread(() => { return Bun.isMainThread }, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+            expect(new Thread(() => Bun.isMainThread).run([])).resolves.toBeFalse()
+        })
+        test('returns as expected for synchronous expressions', () => {
+            expect(new Thread(() => Bun.isMainThread).run([])).resolves.toBeFalse()
+            expect(new Thread(() => typeof Bun !== "undefined").run([])).resolves.toBeTrue()
+            expect(new Thread(() => import("os").then((os) => os.EOL)).run([])).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for synchronous functions', () => {
-            expect(new Thread(add, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(5)
-            expect(new Thread(subtract, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(-1)
-            expect(new Thread(helloWorld, { idleTimeout: 0 }).run([])).resolves.toBe('hello world')
+            expect(new Thread(add).run([2, 3])).resolves.toBe(5)
+            expect(new Thread(subtract).run([2, 3])).resolves.toBe(-1)
+            expect(new Thread(helloWorld).run([])).resolves.toBe('hello world')
+        })
+        test('returns as expected for asynchronous expressions', () => {
+            expect(new Thread(async () => Promise.resolve(Bun.isMainThread)).run([])).resolves.toBeFalse()
+            expect(new Thread(async () => Promise.resolve(typeof Bun !== "undefined")).run([])).resolves.toBeTrue()
+            expect(new Thread(async () => Promise.resolve(import("os").then((os) => os.EOL))).run([])).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for asynchronous functions', () => {
             const thread = new Thread(async () => {
@@ -360,12 +370,22 @@ describe(ThreadPool, () => {
     })
     describe('.run()', () => {
         test('is on a separate thread', () => {
-            expect(new ThreadPool(() => { return Bun.isMainThread }, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+        })
+        test('returns as expected for synchronous expressions', () => {
+            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+            expect(new ThreadPool(() => typeof Bun !== "undefined", { idleTimeout: 0 }).run([])).resolves.toBeTrue()
+            expect(new ThreadPool(() => import("os").then((os) => os.EOL), { idleTimeout: 0 }).run([])).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for synchronous functions', () => {
             expect(new ThreadPool(add, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(5)
             expect(new ThreadPool(subtract, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(-1)
             expect(new ThreadPool(helloWorld, { idleTimeout: 0 }).run([])).resolves.toBe('hello world')
+        })
+        test('returns as expected for asynchronous expressions', () => {
+            expect(new ThreadPool(async () => Promise.resolve(Bun.isMainThread), { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+            expect(new ThreadPool(async () => Promise.resolve(typeof Bun !== "undefined"), { idleTimeout: 0 }).run([])).resolves.toBeTrue()
+            expect(new ThreadPool(async () => Promise.resolve(import("os").then((os) => os.EOL)), { idleTimeout: 0 }).run([])).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for asynchronous functions', () => {
             const tp = new ThreadPool(async () => {
