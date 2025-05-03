@@ -4,7 +4,7 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import { EventEmitter } from "events";
-import { Worker } from "worker_threads";
+// import { Worker } from "worker_threads";
 
 export interface ThreadOptions {
     /**
@@ -219,18 +219,19 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
             const id: string = Bun.randomUUIDv7()
 
             // function to check each message from the worker thread
-            const check = async (event: any) => {
-                if (event.id === id) {
-                    this.worker!.removeListener('message', check)
+            const check = async (event: MessageEvent) => {
+                if (event.data.id === id) {
+                    // @ts-ignore
+                    this.worker!.onmessage = undefined
 
-                    if (event.action === 'resolve') {
-                        resolve(event.data)
+                    if (event.data.action === 'resolve') {
+                        resolve(event.data.data)
                     }
-                    else if (event.action === 'reject') {
-                        reject(event.data)
+                    else if (event.data.action === 'reject') {
+                        reject(event.data.data)
                     }
                     else {
-                        reject(new Error(`An unexpected error occured within the Thread class. Instruction "${event.action}" from worker thread is not defined in this context.`))
+                        reject(new Error(`An unexpected error occured within the Thread class. Instruction "${event.data.action}" from worker thread is not defined in this context.`))
                     }
 
                     // decrement the task queue number
@@ -239,7 +240,8 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
             }
 
             // setup event listener
-            this.worker.on('message', check)
+            // @ts-ignore
+            this.worker.onmessage = check
 
             // dispatch data to worker
             this.worker.postMessage({

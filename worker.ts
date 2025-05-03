@@ -3,47 +3,51 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { parentPort } from "worker_threads";
+// prevents TS errors
+declare var self: Worker;
+
+// import { parentPort } from "worker_threads";
 
 const AsyncFunction = async function () { }.constructor
 let fn: Function
 
 // TODO: switch to native Bun Worker API once it becomes stable
-parentPort?.on('message', async (event: any) => {
-    if (event.action === 'set') {
+// @ts-ignore
+self.onmessage = async (event: MessageEvent) => {
+    if (event.data.action === 'set') {
 
         // Get the names of the arguments passed in.
-        const argNames: string[] = event.data.substring(event.data.indexOf('(') + 1, event.data.indexOf(')')).split(',')
+        const argNames: string[] = event.data.data.substring(event.data.data.indexOf('(') + 1, event.data.data.indexOf(')')).split(',')
 
         let funcBody: string
 
-        if ((event.data as string).endsWith('}')) { // it's a function
+        if ((event.data.data as string).endsWith('}')) { // it's a function
             // chop off the starting and ending brackets
-            funcBody = (event.data as string).substring((event.data as string).indexOf('{') + 1, event.data.length - 1).trim()
+            funcBody = (event.data.data as string).substring((event.data.data as string).indexOf('{') + 1, event.data.data.length - 1).trim()
         }
         else { // it's an expression
             // chop off the '() =>' or 'async () =>' then make it into a function that just returns the expression
-            funcBody = 'return ' + (event.data as string).substring((event.data as string).indexOf('=>') + 2).trim()
+            funcBody = 'return ' + (event.data.data as string).substring((event.data.data as string).indexOf('=>') + 2).trim()
         }
 
         // determine if it's a synchronous or asynchronous function
-        if (event.data.startsWith('async')) {
+        if (event.data.data.startsWith('async')) {
             fn = AsyncFunction(...argNames, funcBody)
         }
         else {
             fn = Function(...argNames, funcBody)
         }
     }
-    else if (event.action === 'call') {
+    else if (event.data.action === 'call') {
         try {
-            parentPort?.postMessage({
-                id: event.id,
+            self.postMessage({
+                id: event.data.id,
                 action: 'resolve',
-                data: await fn.call(undefined, ...event.data)
+                data: await fn.call(undefined, ...event.data.data)
             })
         } catch (error) {
-            parentPort?.postMessage({
-                id: event.id,
+            self.postMessage({
+                id: event.data.id,
                 action: 'reject',
                 data: function(){ // return more helpful error messages for common errors
                     if (error instanceof ReferenceError) {
@@ -55,13 +59,13 @@ parentPort?.on('message', async (event: any) => {
                     return error
                 }()
             })
-        }
+        }        
     }
     else {
-        parentPort?.postMessage({
-            id: event.id,
+        self.postMessage({
+            id: event.data.id,
             action: 'reject',
-            data: new Error(`An unexpected error occured within the worker. Instruction "${event.action}" from main thread is not defined in this context.`)
+            data: new Error(`An unexpected error occured within the worker. Instruction "${event.data.action}" from main thread is not defined in this context.`)
         })
     }
-})
+}
