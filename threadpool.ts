@@ -5,8 +5,9 @@
 
 import { availableParallelism } from "os";
 import { Thread, type ThreadOptions } from "./thread";
+import type { $thisFunction, ThreadFunction } from "./util";
 
-export interface ThreadPoolOptions extends ThreadOptions {
+export interface ThreadPoolOptions<K extends $thisFunction> extends Omit<ThreadOptions<K>, 'threadpoolId'> {
     /** {@inheritDoc ThreadPool.minThreads} */
     minThreads?: number,
     /** {@inheritDoc ThreadPool.maxThreads} */
@@ -47,8 +48,8 @@ export interface ThreadPoolOptions extends ThreadOptions {
  * threadPool.close()
  * ```
  */
-export class ThreadPool<T extends (...args: any[]) => any> {
-    private threads: Thread<T>[]
+export class ThreadPool<T extends ThreadFunction, K extends $thisFunction> {
+    private threads: Thread<T, K>[]
 
     /** {@inheritDoc Thread.fn} */
     public readonly fn: T
@@ -82,7 +83,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         }
         for (let i = 0; i < value; i++) {
             if (typeof this.threads[i] === 'undefined') {
-                this.threads[i] = new Thread<T>(this.fn, { idleTimeout: Infinity })
+                this.threads[i] = new Thread<T, K>(this.fn, { idleTimeout: Infinity })
             }
             else if (this.threads[i]!.idleTimeout !== Infinity) {
                 this.threads[i]!.idleTimeout = Infinity
@@ -90,7 +91,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         }
         for (let i = value; i < this.threads.length; i++) {
             if (typeof this.threads[i] === 'undefined') {
-                this.threads[i] = new Thread<T>(this.fn, { idleTimeout: this.idleTimeout })
+                this.threads[i] = new Thread<T, K>(this.fn, { idleTimeout: this.idleTimeout })
             }
             else if (this.threads[i]!.idleTimeout !== this.idleTimeout) {
                 this.threads[i]!.idleTimeout = this.idleTimeout
@@ -131,7 +132,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         }
         else if (value > this.maxThreads) {
             while (this.threads.length < value) {
-                this.threads.push(new Thread<T>(this.fn, { idleTimeout: this.idleTimeout }))
+                this.threads.push(new Thread<T, K>(this.fn, { idleTimeout: this.idleTimeout }))
             }
         }
         this._maxThreads = value
@@ -209,7 +210,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
      * Callback functions can not be closures or rely upon top level imports, as they do not have access to variables or imports outside of their isolated worker thread environment.
      * They can however use dynamic imports using the `const myPackage = await import('some_package')` syntax.
      */
-    constructor(fn: T, options?: ThreadPoolOptions) {
+    constructor(fn: T, options?: ThreadPoolOptions<K>) {
 
         this.threads = []
         this.minThreads = options?.minThreads ?? 1
@@ -217,19 +218,19 @@ export class ThreadPool<T extends (...args: any[]) => any> {
         this.idleTimeout = options?.idleTimeout ?? 0
         
         for (let i: number = 0; i < this.minThreads; i++) {
-            this.threads[i] = new Thread<T>(fn, { idleTimeout: Infinity })
+            this.threads[i] = new Thread<T, K>(fn, { idleTimeout: Infinity })
         }
         for (let i = this.minThreads; i < this.maxThreads; i++) {
-            this.threads[i] = new Thread<T>(fn, { idleTimeout: this.idleTimeout })
+            this.threads[i] = new Thread<T, K>(fn, { idleTimeout: this.idleTimeout })
         }
         this.fn = fn
     }
 
     /** {@inheritDoc Thread.run} */
-    public async run(args: Parameters<T>): Promise<ReturnType<T>> {
+    public async run(...args: Parameters<T>): Promise<ReturnType<T>> {
 
         // run through a decision tree to select which thread to use, prevents just reusing the same thread over and over
-        let winner: Thread<T> | undefined
+        let winner: Thread<T, K> | undefined
 
         // prefer a thread whose worker isn't closed and isn't busy
         winner = this.threads.find((t) => {
@@ -250,7 +251,7 @@ export class ThreadPool<T extends (...args: any[]) => any> {
             }))
         }
 
-        return winner.run(args)
+        return winner.run(...args)
     }
 
     /**

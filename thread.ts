@@ -5,24 +5,28 @@
 
 import { EventEmitter } from "events";
 import { Worker } from "worker_threads";
+import type { $this, WorkerResponse } from "./util";
 
-export interface ThreadOptions {
+export interface ThreadOptions<K extends (...args: any) => { [key: string]: any }> {
     /**
      * How long (in milliseconds) to keep the {@link Thread} or {@link ThreadPool} active after completing a task before terminating it.
      * Keeping the `Thread` or `ThreadPool` open will decrease repeat startup times, but will cause the program to hang and not exit if the {@link Thread.close} method is not called.
      * Default is `0` (close immediately).
      * @default 0
      */
-    idleTimeout?: number
+    idleTimeout?: number,
+    $this?: $this<K>,
+    threadpoolId?: string
 }
 
 /**
  * Abstraction around Bun workers to enable working with them as promises.
  * @typeParam T - The signature of your callback function, including its arguments and return type.
  */
-export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
+export class Thread<T extends (...args: any) => any, K extends (...args: any) => { [key: string]: any }> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
+    private threadpoolId: string | undefined
 
     private _queued: number;
     /**
@@ -166,6 +170,8 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
         })
     }
 
+    public readonly $this?: $this<K>
+
     /**
      * Create a new `Thread` to run tasks on a separate Bun worker thread.
      * @param fn
@@ -185,11 +191,13 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * })
      * ```
      */
-    constructor(fn: T, options?: ThreadOptions) {
+    constructor(fn: T, options?: ThreadOptions<K>) {
         super()
         this.fn = fn
         this.idleTimeout = options?.idleTimeout ?? 0
         this._queued = 0 // bypass setter to avoid emitting idle state
+        this.$this = options?.$this
+        this.threadpoolId = options?.threadpoolId
     }
 
     /**
@@ -198,17 +206,23 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * If your callback function does not have arguments, you still must pass an empty array.
      * This is required for TypeScript to be able infer arguments.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * @returns A Promise\<ReturnType\<T\>\> that resolves to the return type of your callback function.
+     * @returns A `Promise<ReturnType<T>>` that resolves to the return type of your callback function.
      */
-    public async run(args: Parameters<T>): Promise<ReturnType<T>> {
+    public async run(...args: Parameters<T>): Promise<ReturnType<T>> {
         return new Promise<ReturnType<T>>((resolve, reject) => {
-
             // check if the worker has closed, and if it has, create a new one and update the function
             if (typeof this.worker === 'undefined') {
-                this.worker = new Worker(import.meta.dirname + "/worker")
+                this.worker = new Worker(import.meta.dir + "/worker")
                 this.worker.postMessage({
-                    action: 'set',
-                    data: this.fn.toString()
+                    action: 'init',
+                    id: this.threadpoolId,
+                    data: {
+                        fn: this.fn.toString(),
+                        $this: typeof this.$this !== 'undefined' ? {
+                            fn: this.$this.fn.toString(),
+                            args: this.$this.args,
+                        } : undefined
+                    }
                 })
             }
 
@@ -219,10 +233,9 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
             const id: string = Bun.randomUUIDv7()
 
             // function to check each message from the worker thread
-            const check = async (event: any) => {
+            const check = async (event: WorkerResponse) => {
                 if (event.id === id) {
                     this.worker!.removeListener('message', check)
-
                     if (event.action === 'resolve') {
                         resolve(event.data)
                     }
@@ -230,9 +243,8 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
                         reject(event.data)
                     }
                     else {
-                        reject(new Error(`An unexpected error occured within the Thread class. Instruction "${event.action}" from worker thread is not defined in this context.`))
+                        reject(new Error(`An unexpected error occured within the Thread class. Instruction "${event}" from worker thread is not defined in this context.`))
                     }
-
                     // decrement the task queue number
                     this.queued--
                 }
@@ -322,7 +334,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * add.close()
      * ```
      */
-    public on(eventName: 'idle', listener: (thread: Thread<T>) => void): this
+    public on(eventName: 'idle', listener: (thread: Thread<T, K>) => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `busy` event. This event fires every time a thread has switched from an idle state to working on a task.
      * No checks are made to see if the `listener` has already been added.
@@ -353,7 +365,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * countOccurences.close()
      * ```
      */
-    public on(eventName: 'busy', listener: (thread: Thread<T>) => void): this
+    public on(eventName: 'busy', listener: (thread: Thread<T, K>) => void): this
     /**
      * Adds the `listener` function to the end of the listeners array for the `close` event. This event fires when a thread has closed its underlying worker object.
      * A thread can still be reused by calling run() again, but will have longer startup times vs. not closing it before calling run() again, as a worker has to be created again after closing.
@@ -386,7 +398,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * console.log(await scramble.run(['hello world'])) // outputs a randomly rearranged 'hello world'
      * ```
      */
-    public on(eventName: 'close', listener: (thread: Thread<T>) => void): this
+    public on(eventName: 'close', listener: (thread: Thread<T, K>) => void): this
     public on(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
@@ -414,7 +426,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * reverse.close()
      * ```
      */
-    public once(eventName: 'idle', listener: (thread: Thread<T>) => void): this
+    public once(eventName: 'idle', listener: (thread: Thread<T, K>) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `busy`. The next time `busy` is triggered, this listener is removed and then invoked.
      * This event fires every time a thread has switched from an idle state to working on a task.
@@ -439,7 +451,7 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * console.log('Doing other work in the meantime...')
      * ```
      */
-    public once(eventName: 'busy', listener: (thread: Thread<T>) => void): this
+    public once(eventName: 'busy', listener: (thread: Thread<T, K>) => void): this
     /**
      * Adds a **one-time** `listener` function for the event named `close`. The next time `close` is triggered, this listener is removed and then invoked.
      * This event fires once when a thread has closed its underlying worker object.
@@ -462,16 +474,16 @@ export class Thread<T extends (...args: any[]) => any> extends EventEmitter {
      * sumThread.run([0, 1_000_000]).then((sum: number) => console.log(sum))
      * ```
      */
-    public once(eventName: 'close', listener: (thread: Thread<T>) => void): this
+    public once(eventName: 'close', listener: (thread: Thread<T, K>) => void): this
     public once(eventName: string | symbol, listener: (...args: any) => void): this {
         return super.on(eventName, listener)
     }
 
-    public prependListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T>) => void): this {
+    public prependListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T, K>) => void): this {
         return super.prependListener(eventName, listener)
     }
 
-    public prependOnceListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T>) => void): this {
+    public prependOnceListener(eventName: 'idle' | 'busy' | 'close', listener: (thread: Thread<T, K>) => void): this {
         return super.prependOnceListener(eventName, listener)
     }
 
