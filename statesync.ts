@@ -7,7 +7,7 @@ interface SharedValueBaseMessage {
 }
 
 interface SharedValueInitMessage extends SharedValueBaseMessage {
-    action: 'init'
+    action: 'set'
     id: string
 }
 

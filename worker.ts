@@ -3,72 +3,25 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { Mutex } from "async-mutex";
-import { BroadcastChannel, parentPort } from "worker_threads";
+import { parentPort } from "worker_threads";
 import { AsyncFunction, getFunctionArgumentNames, getFunctionBody, type WorkerRequest } from "./util";
 
-// prevents TS errors
-// declare var self: Worker;
-// self.threadId
-
-let bc: BroadcastChannel
 let fn: Function
-let pendingPromises: Promise<any>[] = []
-
-let $this: {
-    [key: string]: {
-        ownerId: number | null
-        mutex: Mutex
-        data: any
-    }
-} = {}
 
 // TODO: switch to native Bun Worker API once it becomes stable
 parentPort?.on('message', async (event: WorkerRequest) => {
     try {
-        if (event.action === 'init') {
-            if (event.data.$this) {
-                const $thisArgNames: string[] = getFunctionArgumentNames(event.data.$this.fn)
-                const $thisBody: string = getFunctionBody(event.data.$this.fn)
-                const $thisIsAsync: boolean = event.data.$this.fn.startsWith('async')
-                let kv: { [key: string]: any }
-                if ($thisIsAsync) {
-                    const $thisProm: Promise<{ [key: string]: any }> = AsyncFunction(...$thisArgNames, $thisBody).call(undefined, ...event.data.$this.args)//.then((result: { [key: string]: any }) => { $this = result })
-                    pendingPromises.push($thisProm)
-                    kv = await $thisProm
-                }
-                else {
-                    kv = Function(...$thisArgNames, $thisBody).call(undefined, ...event.data.$this.args)
-                }
-                for (let [k, v] of Object.entries(kv)) {
-                    $this[k] = {
-                        mutex: new Mutex(),
-                        ownerId: null,
-                        data: v
-                    }
-                }
-            }
-
-            if (event.id) {
-                bc = new BroadcastChannel(event.id)
-            }
-
-            const fnArgNames: string[] = getFunctionArgumentNames(event.data.fn)
-            const fnBody: string = getFunctionBody(event.data.fn).replaceAll('$this', 'this')
-            const fnIsAsync: boolean = event.data.fn.startsWith('async')
-            if (fnIsAsync) {
-                fn = AsyncFunction(...fnArgNames, fnBody)
-            }
-            else {
-                fn = Function(...fnArgNames, fnBody)
-            }
+        if (event.action === 'set') {
+            const fnArgNames: string[] = getFunctionArgumentNames(event.data)
+            const fnBody: string = getFunctionBody(event.data)
+            const fnIsAsync: boolean = event.data.startsWith('async')
+            fn = fnIsAsync ? AsyncFunction(...fnArgNames, fnBody) : Function(...fnArgNames, fnBody)
         }
         else if (event.action === 'call') {
-            await Promise.allSettled(pendingPromises) // prevents calling fn before $this is set
             parentPort?.postMessage({
                 id: event.id,
                 action: 'resolve',
-                data: await fn.call($this, ...event.data)
+                data: await fn.call(undefined, ...event.data)
             })
         }
         else {
@@ -76,7 +29,7 @@ parentPort?.on('message', async (event: WorkerRequest) => {
         }
     } catch (error) {
         parentPort?.postMessage({
-            id: event.id,
+            id: 'id' in event ? event.id : undefined,
             action: 'reject',
             data: function () { // return more helpful error messages for common errors
                 if (error instanceof ReferenceError) {

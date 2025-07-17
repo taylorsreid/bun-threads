@@ -27,25 +27,9 @@ type BaseStructuredClonable = ArrayBuffer | Boolean | DataView | Date | Error | 
 type MultiStructuredClonable = Array<BaseStructuredClonable> | Map<BaseStructuredClonable, BaseStructuredClonable> | { [key: string | symbol]: BaseStructuredClonable } | Set<BaseStructuredClonable>
 export type StructuredClonable = BaseStructuredClonable & MultiStructuredClonable
 
-// export type ThreadFunction = (...args: any) => any
-
-// export type $thisFunction = (...args: any) => { [key: string]: any }
-
-export interface $this<K extends (...args: any) => { [key: string]: any }> {
-    fn: K;
-    args: Parameters<K>;
-}
-
-export interface WorkerInitRequest {
-    action: 'init',
-    id?: string,
-    data: {
-        fn: string,
-        $this?: {
-            fn: string,
-            args: any[]
-        }
-    }
+export interface WorkerSetRequest {
+    action: 'set',
+    data: string
 }
 
 export interface WorkerCallRequest {
@@ -54,7 +38,7 @@ export interface WorkerCallRequest {
     data: any[]
 }
 
-export type WorkerRequest = WorkerInitRequest | WorkerCallRequest
+export type WorkerRequest = WorkerSetRequest | WorkerCallRequest
 
 export interface WorkerResolveResponse {
     id: string,
