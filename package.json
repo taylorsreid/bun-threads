@@ -2,13 +2,18 @@
   "name": "bun-threads",
   "version": "2.0.0",
   "author": "Taylor Reid",
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/taylorsreid/bun-threadpool.git"
   },
-  "type": "module",
   "module": "index.js",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typedoc": "^0.28.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
   "description": "Abstractions around Bun workers to enable working with them as promises.",
   "homepage": "https://taylorsreid.github.io/bun-threads/",
   "keywords": [
@@ -20,18 +25,10 @@
     "threading",
     "multithreading"
   ],
+  "license": "MIT",
   "scripts": {
     "build": "bun build --entrypoints ./index.ts ./worker.ts --outdir ./dist --target bun --sourcemap=linked && tsc && rm dist/worker.d.ts && cp package.json dist/package.json && cp README.md dist/README.md && cp LICENSE dist/LICENSE",
     "typedoc": "typedoc index.ts --exclude \"scratch.ts\" --html docs"
   },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "typedoc": "^0.28.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "async-mutex": "^0.5.0"
-  }
+  "type": "module"
 }

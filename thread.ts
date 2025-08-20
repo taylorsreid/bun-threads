@@ -5,7 +5,7 @@
 
 import { EventEmitter } from "events";
 import { Worker } from "worker_threads";
-import type { WorkerResponse } from "./util";
+import type { WorkerResponse } from "./worker";
 
 export interface ThreadOptions {
     /**

@@ -4,7 +4,56 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import { parentPort } from "worker_threads";
-import { AsyncFunction, getFunctionArgumentNames, getFunctionBody, type WorkerRequest } from "./util";
+
+interface WorkerSetRequest {
+    action: 'set',
+    data: string
+}
+
+interface WorkerCallRequest {
+    action: 'call',
+    id: string,
+    data: any[]
+}
+
+type WorkerRequest = WorkerSetRequest | WorkerCallRequest
+
+interface WorkerResolveResponse {
+    id: string,
+    action: 'resolve',
+    data: any
+}
+
+interface WorkerRejectResponse {
+    id: string,
+    action: 'reject',
+    data: Error
+}
+
+export type WorkerResponse = WorkerResolveResponse | WorkerRejectResponse
+
+const AsyncFunction = async function () { }.constructor
+
+function getFunctionArgumentNames(fn: string | Function): string[] {
+    if (typeof fn === 'function') {
+        fn = fn.toString()
+    }
+    return fn.substring(fn.indexOf('(') + 1, fn.indexOf(')')).split(',')
+}
+
+function getFunctionBody(fn: string | Function): string {
+    if (typeof fn === 'function') {
+        fn = fn.toString()
+    }
+    if (fn.endsWith('}')) { // it's a function
+        // chop off the starting and ending brackets
+        return fn.substring(fn.indexOf('{') + 1, fn.length - 1).trim()
+    }
+    else { // it's an expression
+        // chop off the '() =>' or 'async () =>' then make it into a function that just returns the expression
+        return 'return ' + fn.substring(fn.indexOf('=>') + 2).trim()
+    }
+}
 
 let fn: Function
 
@@ -13,8 +62,12 @@ parentPort?.on('message', async (event: WorkerRequest) => {
     try {
         if (event.action === 'set') {
             const fnArgNames: string[] = getFunctionArgumentNames(event.data)
-            const fnBody: string = getFunctionBody(event.data)
-            const fnIsAsync: boolean = event.data.startsWith('async')
+            let fnBody: string = getFunctionBody(event.data)
+            let fnIsAsync: boolean = event.data.startsWith('async')
+            if (fnBody.includes('SharedValue') && (!fnBody.includes('import("bun-threads")'))) {
+                fnBody = `const { SharedValue, SharedValueServer } = await import("${import.meta.dir}/sharedvalue");\n` + fnBody
+                fnIsAsync = true
+            }
             fn = fnIsAsync ? AsyncFunction(...fnArgNames, fnBody) : Function(...fnArgNames, fnBody)
         }
         else if (event.action === 'call') {

@@ -5,4 +5,4 @@
 
 export { Thread, type ThreadOptions } from './thread'
 export { ThreadPool, type ThreadPoolOptions } from './threadpool'
-export let $this: { [key: string]: any } = {}
+export { SharedValue, SharedValueServer } from './sharedvalue'
