@@ -81,7 +81,7 @@ export class SharedValue<T = any> {
         }
     }
 
-    public static async get(key: string, lock: boolean = true): Promise<SharedValue<any>> {
+    public static async get<T = any>(key: string, lock: boolean = true): Promise<SharedValue<T>> {
         return new Promise((resolve, reject) => {
             const id: string = Bun.randomUUIDv7()
             const bc = new BroadcastChannel(`bun-threads-sync`)
