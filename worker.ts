@@ -4,6 +4,7 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import { parentPort } from "worker_threads";
+import { AsyncFunction, getFunctionArgumentNames, getFunctionBody } from "./util";
 
 interface WorkerSetRequest {
     action: 'set',
@@ -32,29 +33,6 @@ interface WorkerRejectResponse {
 
 export type WorkerResponse = WorkerResolveResponse | WorkerRejectResponse
 
-const AsyncFunction = async function () { }.constructor
-
-function getFunctionArgumentNames(fn: string | Function): string[] {
-    if (typeof fn === 'function') {
-        fn = fn.toString()
-    }
-    return fn.substring(fn.indexOf('(') + 1, fn.indexOf(')')).split(',')
-}
-
-function getFunctionBody(fn: string | Function): string {
-    if (typeof fn === 'function') {
-        fn = fn.toString()
-    }
-    if (fn.endsWith('}')) { // it's a function
-        // chop off the starting and ending brackets
-        return fn.substring(fn.indexOf('{') + 1, fn.length - 1).trim()
-    }
-    else { // it's an expression
-        // chop off the '() =>' or 'async () =>' then make it into a function that just returns the expression
-        return 'return ' + fn.substring(fn.indexOf('=>') + 2).trim()
-    }
-}
-
 let fn: Function
 
 // TODO: switch to native Bun Worker API once it becomes stable
@@ -74,7 +52,7 @@ parentPort?.on('message', async (event: WorkerRequest) => {
             parentPort?.postMessage({
                 id: event.id,
                 action: 'resolve',
-                data: await fn.call(undefined, ...event.data)
+                data: await fn.apply(undefined, event.data)
             })
         }
         else {

@@ -5,44 +5,30 @@
 
 import { BroadcastChannel } from "worker_threads";
 
-interface SharedValueGetMessage {
+type ClientMessage = {
     action: 'get',
     id: string,
     key: string,
     lock: boolean
-}
-
-interface SharedValueSetMessage {
+} | {
     action: 'set',
     key: string,
     value: any
-}
-
-interface SharedValueReleaseMessage {
+} | {
     action: 'release',
     key: string
 }
 
-// interface SharedValueDeleteMessage {
-//     action: 'delete'
-// }
-
-type SharedValueMessage = SharedValueGetMessage | SharedValueSetMessage | SharedValueReleaseMessage// | SharedValueDeleteMessage
-
-interface ServerResolveMessage {
+type ServerMessage = {
     action: 'resolve',
     id: string,
     value: any,
     waiting: number
-}
-
-interface ServerRejectMessage {
+} | {
     action: 'reject',
     id: string,
     reason: string
 }
-
-type ServerMessage = ServerResolveMessage | ServerRejectMessage
 
 export class SharedValue<T = any> {
     public readonly key: string
@@ -87,7 +73,7 @@ export class SharedValue<T = any> {
             const bc = new BroadcastChannel(`bun-threads-sync`)
             // @ts-expect-error
             bc.onmessage = (rawMessage: MessageEvent) => {
-                const message: ServerMessage | SharedValueMessage = rawMessage.data
+                const message: ServerMessage | ClientMessage = rawMessage.data
                 if (message.action === 'resolve' && message.id === id) {
                     resolve(new SharedValue(key, message.value, message.waiting, lock))
                     bc.close()
@@ -143,7 +129,7 @@ export class SharedValueServer {
         this.bc = new BroadcastChannel('bun-threads-sync')
         // @ts-expect-error
         this.bc.onmessage = (rawMessage: MessageEvent) => {
-            const message: SharedValueMessage = rawMessage.data
+            const message: ClientMessage = rawMessage.data
             switch (message.action) {
                 case "get":
                     if (typeof this.kv[message.key] !== 'undefined') {
