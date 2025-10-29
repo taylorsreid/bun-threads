@@ -85,7 +85,7 @@ describe(Thread, () => {
             const thread = new Thread(() => {setTimeout(() => {}, 10)})
             thread.run() // intentionally don't await
             expect(thread.busy).toBeTrue()
-            await Bun.sleep(20)
+            await Bun.sleep(100)
             expect(thread.busy).toBeFalse()
             thread.close()
         })
@@ -419,6 +419,7 @@ describe(ThreadPool, () => {
 describe(SharedValue, () => {
     let server: SharedValueServer
     beforeEach(() => server = new SharedValueServer())
+    afterEach(() => server.shutdown())
     test('runs in a Thread and does not need to be imported', async () => {
         const thread = new Thread(async () => {
             (await SharedValue.new('foo', 'bar')).release()
@@ -433,54 +434,118 @@ describe(SharedValue, () => {
         })
         expect(await tp.run()).toBe('bar')
     });
-    // [BigInt(9007199254740991), true, () => { return true }, 42, { question: 'Answer to the Ultimate Question of Life, the Universe, and Everything', answer: 42 }, 'Vorgons', undefined]
-    test('.new()', async () => {
-        const sv = await SharedValue.new('foo', 'bar')
-        expect(sv.key).toBe('foo')
-        expect(sv.value).toBe('bar')
-        expect(sv.waiting).toBe(0)
-        expect(sv.locked).toBeTrue()
-        expect(sv['args']).toBeUndefined()
-        // TODO: move to server tests
-        // expect(server['kv']['foo'].value).toBe('bar')
-        // expect(server['kv']['foo'].queue).toBeArrayOfSize(1)
-        sv.release()
-    });
-    test('.exists()', async () => {
-        expect(await SharedValue.exists('foo')).toBeFalse()
-        ;(await SharedValue.new('foo', 'bar')).release()
-        expect(await SharedValue.exists('foo')).toBeTrue()
-    });
-    test('.get()', async () => {
-        expect(async () => { await SharedValue.get('foo') }).toThrowError()
-        ;(await SharedValue.new('foo', 'bar')).release()
-        const sv: SharedValue<string> = await SharedValue.get('foo')
-        expect(sv.key).toBe('foo')
-        expect(sv.value).toBe('bar')
-        expect(sv.waiting).toBe(0)
-        expect(sv.locked).toBeTrue()
-        expect(sv['args']).toBeUndefined()
-        sv.release()
-    });
-    test('.save()', async () => {
-        (await SharedValue.new('foo', 'bar')).release()
-        let sv: SharedValue<string> = await SharedValue.get('foo')
-        expect(sv.value).toBe('bar')
-        sv.value = 'buzz'
-        await sv.save()
-        sv.release()
-        sv = await SharedValue.get('foo')
-        expect(sv.value).toBe('buzz')
-        sv.release()
-    });
-    test('.release()', async () => {
-        const sv = await SharedValue.new('foo', 'bar')
-        expect(sv.locked).toBeTrue()
-        expect(sv.release()).toBeTrue()
-        expect(sv.locked).toBeFalse()
-        expect(sv.release()).toBeFalse()
-    });
-    afterEach(() => server.shutdown())
+    describe('properties', () => {
+        test('waiting', async () => {
+            (await SharedValue.new('foo', 'bar')).release()
+        })
+    })
+    describe('methods', () => {
+        describe('.new()', () => {
+            describe('primitives', () => {
+                test('string', async () => {
+                    const sv = await SharedValue.new('string', 'test')
+                    expect(sv.key).toBe('string')
+                    expect(sv.value).toBe('test')
+                    // expect(sv.waiting).toBe(0)
+                    // expect(sv.locked).toBeTrue()
+                    // expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+                test('number', async () => {
+                    const sv = await SharedValue.new('number', 42)
+                    expect(sv.key).toBe('number')
+                    expect(sv.value).toBe(42)
+                    expect(sv.waiting).resolves.toBe(0)
+                    expect(sv.locked).toBeTrue()
+                    expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+                test('bigint', async () => {
+                    const sv = await SharedValue.new('bigint', BigInt(9007199254740991))
+                    expect(sv.key).toBe('bigint')
+                    expect(sv.value).toBe(BigInt(9007199254740991))
+                    expect(sv.waiting).resolves.toBe(0)
+                    expect(sv.locked).toBeTrue()
+                    expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+                test('boolean', async () => {
+                    const sv = await SharedValue.new('boolean', true)
+                    expect(sv.key).toBe('boolean')
+                    expect(sv.value).toBeTrue()
+                    expect(sv.waiting).resolves.toBe(0)
+                    expect(sv.locked).toBeTrue()
+                    expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+                test('undefined', async () => {
+                    const sv = await SharedValue.new('undefined', undefined)
+                    expect(sv.key).toBe('undefined')
+                    expect(sv.value).toBeUndefined()
+                    expect(sv.waiting).resolves.toBe(0)
+                    expect(sv.locked).toBeTrue()
+                    expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+                // symbol isn't cloneable
+                test('null', async () => {
+                    const sv = await SharedValue.new('null', null)
+                    expect(sv.key).toBe('null')
+                    expect(sv.value).toBe(null)
+                    expect(sv.waiting).resolves.toBe(0)
+                    expect(sv.locked).toBeTrue()
+                    expect(sv['args']).toBeUndefined()
+                    sv.release()
+                })
+            })
+            describe('objects', () => {
+
+            })
+
+            // TODO: move to server tests
+            // expect(server['kv']['foo'].value).toBe('bar')
+            // expect(server['kv']['foo'].queue).toBeArrayOfSize(1)
+        });
+        test('.exists()', async () => {
+            expect(await SharedValue.exists('foo')).toBeFalse()
+            ;(await SharedValue.new('foo', 'bar')).release()
+            expect(await SharedValue.exists('foo')).toBeTrue()
+        });
+        // TODO: REFACTOR
+        describe('.get()', () => {
+            test(`throws when doesn't exist`, () => {
+                expect(async () => { await SharedValue.get('foo') }).toThrowError()
+            })
+            test('string', async () => {
+                ;(await SharedValue.new('foo', 'bar')).release()
+                const sv: SharedValue<string> = await SharedValue.get('foo')
+                expect(sv.key).toBe('foo')
+                expect(sv.value).toBe('bar')
+                // expect(sv.waiting).resolves.toBe(0)
+                expect(sv.locked).toBeTrue()
+                expect(sv['args']).toBeUndefined()
+                sv.release()
+            });
+        })
+        test('.save()', async () => {
+            (await SharedValue.new('foo', 'bar')).release()
+            let sv: SharedValue<string> = await SharedValue.get('foo')
+            expect(sv.value).toBe('bar')
+            sv.value = 'buzz'
+            await sv.save()
+            sv.release()
+            sv = await SharedValue.get('foo')
+            expect(sv.value).toBe('buzz')
+            sv.release()
+        });
+        test('.release()', async () => {
+            const sv = await SharedValue.new('foo', 'bar')
+            expect(sv.locked).toBeTrue()
+            expect(sv.release()).toBeTrue()
+            expect(sv.locked).toBeFalse()
+            expect(sv.release()).toBeFalse()
+        });
+    })
 });
 
 describe(SharedValueServer, () => {

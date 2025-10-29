@@ -42,6 +42,9 @@ type ClientMessage = {
 } | {
     action: 'exists',
     key: string
+} | {
+    action: 'waiting',
+    key: string
 }
 
 type ServerMessage = {
@@ -63,6 +66,9 @@ type ServerMessage = {
     action: 'resolve_set'
     id: string
 } | {
+    action: 'resolve_waiting',
+    value: number
+} | {
     action: 'reject'
     id: string
     value: string
@@ -83,7 +89,23 @@ export class SharedValue<T = any> {
 
     public value: T
 
-    public readonly waiting: number
+    public get waiting(): Promise<number> {
+        return new Promise<number>((resolve) => {
+            const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-sync`)
+            // @ts-expect-error
+            bc.onmessage = (rawMessage: MessageEvent) => {
+                const message: ServerMessage | ClientMessage = rawMessage.data
+                if (message.action === 'resolve_waiting') {
+                    resolve(message.value)
+                    bc.close()
+                }
+            }
+            bc.postMessage({
+                action: 'waiting',
+                key: this.key
+            })
+        })
+    }
 
     private _locked: boolean
     public get locked(): boolean {
@@ -92,10 +114,10 @@ export class SharedValue<T = any> {
 
     private args?: any[]
 
-    private constructor(key: string, value: T, waiting: number, locked: boolean, args?: any[]) {
+    private constructor(key: string, value: T, locked: boolean, args?: any[]) {
         this.key = key
         this.value = value
-        this.waiting = waiting
+        // this.waiting = waiting
         this._locked = locked
         this.args = args
     }
@@ -106,19 +128,12 @@ export class SharedValue<T = any> {
         if (await SharedValue.exists(key)) {
             throw new Error(`A SharedValue for key "${key}" already exists. Use a different unique key or use SharedValue.get() to modify the existing value.`)
         }
-        await new SharedValue(key, value, 0, true, args).save()
+        await new SharedValue(key, value, true, args).save()
         return SharedValue.get(key) // need to call get() to obtain the lock
     }
 
     // TODO: make exists a separate message type from get to reduce serialization overhead
     public static async exists(key: string): Promise<boolean> {
-        // try {
-        //     await SharedValue.get(key, false)
-        //     return true
-        // }
-        // catch (error) {
-        //     return false
-        // }
         return new Promise<boolean>((resolve, reject) => {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-sync`)
             // @ts-expect-error
@@ -126,6 +141,7 @@ export class SharedValue<T = any> {
                 const message: ServerMessage | ClientMessage = rawMessage.data
                 if (message.action === 'resolve_exists') {
                     resolve(message.value)
+                    bc.close()
                 }
             }
             bc.postMessage({ action: 'exists', key })
@@ -144,7 +160,7 @@ export class SharedValue<T = any> {
                 const message: ServerMessage | ClientMessage = rawMessage.data
                 if (message.action === 'resolve_get' && message.id === id) {
                     if (message.cloneable) {
-                        resolve(new SharedValue(key, message.value, message.waiting, lock))
+                        resolve(new SharedValue(key, message.value, lock))
                     }
                     else {
                         const remoteObject: RemoteObject<T> = {} as RemoteObject<T> // do it anyways
@@ -195,14 +211,13 @@ export class SharedValue<T = any> {
                                 })
                             }
                         }
-                        resolve(new SharedValue(key, remoteObject, message.waiting, lock))
+                        resolve(new SharedValue(key, remoteObject, lock))
                     }
-                    bc.close()
                 }
                 else if (message.action === 'reject' && message.id === id) {
                     reject(new Error(message.value))
-                    bc.close()
                 }
+                bc.close()
             }
             if (typeof lockOrExpected === 'boolean') {
                 bc.postMessage({ action: 'get', id, key, lockOrExpected })
@@ -411,6 +426,12 @@ export class SharedValueServer {
                         }
                         // else isn't possible because property setters can't have return values
                     }
+                    break;
+                case "waiting":                    
+                    this.bc.postMessage({
+                        action: 'resolve_waiting',
+                        value: this.kv[message.key]!.queue.length > 0 ? this.kv[message.key]!.queue.length - 1 : 0
+                    })
                     break;
             }
         }
