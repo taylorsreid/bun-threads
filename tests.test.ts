@@ -3,9 +3,8 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { SharedValue, SharedValueServer } from './sharedvalue';
 import { Thread } from "./thread";
 import { ThreadPool } from './threadpool';
 
@@ -82,7 +81,7 @@ describe(Thread, () => {
             expect(new Thread(helloWorld).busy).toBeFalse()
         })
         test('side effects', async () => {
-            const thread = new Thread(() => {setTimeout(() => {}, 10)})
+            const thread = new Thread(() => { setTimeout(() => { }, 10) })
             thread.run() // intentionally don't await
             expect(thread.busy).toBeTrue()
             await Bun.sleep(100)
@@ -168,8 +167,8 @@ describe(Thread, () => {
     })
     test('events', () => {
         const thread = new Thread(helloWorld)
-        expect(thread.on('busy', () => {})).toStrictEqual(thread)
-        expect(thread.prependListener('busy', () => {})).toStrictEqual(thread)
+        expect(thread.on('busy', () => { })).toStrictEqual(thread)
+        expect(thread.prependListener('busy', () => { })).toStrictEqual(thread)
     })
 })
 
@@ -415,175 +414,3 @@ describe(ThreadPool, () => {
         })
     })
 })
-
-describe(SharedValue, () => {
-    let server: SharedValueServer
-    beforeEach(() => server = new SharedValueServer())
-    afterEach(() => server.shutdown())
-    test('runs in a Thread and does not need to be imported', async () => {
-        const thread = new Thread(async () => {
-            (await SharedValue.new('foo', 'bar')).release()
-            return (await SharedValue.get('foo', false)).value
-        })
-        expect(await thread.run()).toBe('bar')
-    });
-    test('runs in a ThreadPool and does not need to be imported', async () => {
-        const tp = new ThreadPool(async () => {
-            (await SharedValue.new('foo', 'bar')).release()
-            return (await SharedValue.get('foo', false)).value
-        })
-        expect(await tp.run()).toBe('bar')
-    });
-    describe('properties', () => {
-        test('waiting', async () => {
-            (await SharedValue.new('foo', 'bar')).release()
-        })
-    })
-    describe('methods', () => {
-        describe('.new()', () => {
-            describe('primitives', () => {
-                test('string', async () => {
-                    const sv = await SharedValue.new('string', 'test')
-                    expect(sv.key).toBe('string')
-                    expect(sv.value).toBe('test')
-                    // expect(sv.waiting).toBe(0)
-                    // expect(sv.locked).toBeTrue()
-                    // expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-                test('number', async () => {
-                    const sv = await SharedValue.new('number', 42)
-                    expect(sv.key).toBe('number')
-                    expect(sv.value).toBe(42)
-                    expect(sv.waiting).resolves.toBe(0)
-                    expect(sv.locked).toBeTrue()
-                    expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-                test('bigint', async () => {
-                    const sv = await SharedValue.new('bigint', BigInt(9007199254740991))
-                    expect(sv.key).toBe('bigint')
-                    expect(sv.value).toBe(BigInt(9007199254740991))
-                    expect(sv.waiting).resolves.toBe(0)
-                    expect(sv.locked).toBeTrue()
-                    expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-                test('boolean', async () => {
-                    const sv = await SharedValue.new('boolean', true)
-                    expect(sv.key).toBe('boolean')
-                    expect(sv.value).toBeTrue()
-                    expect(sv.waiting).resolves.toBe(0)
-                    expect(sv.locked).toBeTrue()
-                    expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-                test('undefined', async () => {
-                    const sv = await SharedValue.new('undefined', undefined)
-                    expect(sv.key).toBe('undefined')
-                    expect(sv.value).toBeUndefined()
-                    expect(sv.waiting).resolves.toBe(0)
-                    expect(sv.locked).toBeTrue()
-                    expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-                // symbol isn't cloneable
-                test('null', async () => {
-                    const sv = await SharedValue.new('null', null)
-                    expect(sv.key).toBe('null')
-                    expect(sv.value).toBe(null)
-                    expect(sv.waiting).resolves.toBe(0)
-                    expect(sv.locked).toBeTrue()
-                    expect(sv['args']).toBeUndefined()
-                    sv.release()
-                })
-            })
-            describe('objects', () => {
-
-            })
-
-            // TODO: move to server tests
-            // expect(server['kv']['foo'].value).toBe('bar')
-            // expect(server['kv']['foo'].queue).toBeArrayOfSize(1)
-        });
-        test('.exists()', async () => {
-            expect(await SharedValue.exists('foo')).toBeFalse()
-            ;(await SharedValue.new('foo', 'bar')).release()
-            expect(await SharedValue.exists('foo')).toBeTrue()
-        });
-        // TODO: REFACTOR
-        describe('.get()', () => {
-            test(`throws when doesn't exist`, () => {
-                expect(async () => { await SharedValue.get('foo') }).toThrowError()
-            })
-            test('string', async () => {
-                ;(await SharedValue.new('foo', 'bar')).release()
-                const sv: SharedValue<string> = await SharedValue.get('foo')
-                expect(sv.key).toBe('foo')
-                expect(sv.value).toBe('bar')
-                // expect(sv.waiting).resolves.toBe(0)
-                expect(sv.locked).toBeTrue()
-                expect(sv['args']).toBeUndefined()
-                sv.release()
-            });
-        })
-        test('.save()', async () => {
-            (await SharedValue.new('foo', 'bar')).release()
-            let sv: SharedValue<string> = await SharedValue.get('foo')
-            expect(sv.value).toBe('bar')
-            sv.value = 'buzz'
-            await sv.save()
-            sv.release()
-            sv = await SharedValue.get('foo')
-            expect(sv.value).toBe('buzz')
-            sv.release()
-        });
-        test('.release()', async () => {
-            const sv = await SharedValue.new('foo', 'bar')
-            expect(sv.locked).toBeTrue()
-            expect(sv.release()).toBeTrue()
-            expect(sv.locked).toBeFalse()
-            expect(sv.release()).toBeFalse()
-        });
-    })
-});
-
-describe(SharedValueServer, () => {
-    test('runs on main thread', async () => {
-        expect(() => { new SharedValueServer().shutdown() }).not.toThrow()
-    });
-    test('does not need to be imported into a Thread', async () => {
-        const thread = new Thread(async () => {
-            new SharedValueServer()
-        })
-        expect(() => { thread.run() }).not.toThrow()
-    });
-    test('runs on separate threads', async () => {
-        const server = new Thread(async () => {
-            new SharedValueServer()
-        }, {
-            idleTimeout: Infinity
-        })
-
-        const client = new Thread(async () => {
-            (await SharedValue.new('foo', 'bar')).release()
-            const sv: SharedValue<string> = await SharedValue.get('foo')
-            sv.release()
-            return sv.value
-        })
-
-        await server.run()
-        expect(await client.run()).toBe('bar')
-        server.close()
-    });
-    // test('.kv mutates', async () => {
-    //     const server = new SharedValueServer()
-    //     expect(server['kv']).toStrictEqual({});
-    //     (await SharedValue.new('foo', 'bar')).release()
-    //     await Bun.sleep(10) // release takes a short time to actually take effect but isn't a promise
-    //     // @ts-ignore
-    //     expect(server['kv']['foo'].value).toBe('bar')
-    //     expect(server['kv']['foo'].queue).toBeArrayOfSize(0)
-    //     server.shutdown()
-    // });
-});

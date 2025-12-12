@@ -138,13 +138,13 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      *     return current
      * })
      * 
-     * countUp.run([1_000_000])
-     * countDown.run([1_000_000])
+     * countUp.run(1_000_000)
+     * countDown.run(1_000_000)
      * 
      * // you can use the idle property to get the **thread** that finishes first, not the result
      * Promise.race([countUp.idle, countDown.idle]).then((winner) => {
      *     // do it again
-     *     winner.run([1_000_000]).then(async (value: number) => {
+     *     winner.run(1_000_000).then(async (value: number) => {
      *         if (value === 0) {
      *             console.log('countDown was the winner')
      *         }
@@ -268,12 +268,12 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * 
      * // this code will wait for the thread to finish its operation before closing, printing 'hello'
      * const threadOne = new Thread(waitThenReturn)
-     * threadOne.run(['hello']).then((result) => console.log(result))
+     * threadOne.run('hello').then((result) => console.log(result))
      * threadOne.close() // force defaults to false
      * 
      * // this code will force the thread to close without waiting for it to finish its operation, 'world' never gets printed
      * const threadTwo = new Thread(waitThenReturn)
-     * threadTwo.run(['world']).then((result) => console.log(result))
+     * threadTwo.run('world').then((result) => console.log(result))
      * threadTwo.close(true)
      * ```
      */
@@ -317,8 +317,8 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * helloWorld.on('idle', idleHandler)
      * add.on('idle', idleHandler)
      * 
-     * helloWorld.run([])
-     * add.run([1, 2])
+     * helloWorld.run()
+     * add.run(1, 2)
      * 
      * helloWorld.close()
      * add.close()
@@ -350,8 +350,8 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      *     console.log('Begun counting occurences in a separate thread.')
      * })
      * 
-     * console.log(await countOccurences.run(['o', 'hello world']))
-     * console.log(await countOccurences.run(['e', 'Answer to the Ultimate Question of Life, The Universe, and Everything']))
+     * console.log(await countOccurences.run('o', 'hello world'))
+     * console.log(await countOccurences.run('e', 'Answer to the Ultimate Question of Life, The Universe, and Everything'))
      * countOccurences.close()
      * ```
      */
@@ -385,7 +385,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      *     console.log(`Scramble thread has completed its work and has closed after its idleTimeout of ${scramble.idleTimeout} milliseconds.`)
      * })
      * 
-     * console.log(await scramble.run(['hello world'])) // outputs a randomly rearranged 'hello world'
+     * console.log(await scramble.run('hello world')) // outputs a randomly rearranged 'hello world'
      * ```
      */
     public on(eventName: 'close', listener: (thread: Thread<T>) => void): this
@@ -409,7 +409,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * 
      * reverse.once('idle', () => console.log('Reverse thread is now idling.'))
      * 
-     * reverse.run(['Answer to the Ultimate Question of Life, The Universe, and Everything']).then((result) => console.log('Reversed:', result))
+     * reverse.run('Answer to the Ultimate Question of Life, The Universe, and Everything').then((result) => console.log('Reversed:', result))
      * console.log('doing some other work in the meantime...')
      * console.log('working...')
      * console.log('working...')
@@ -437,7 +437,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * 
      * generate.once('busy', () => console.log('Thread is busy generating a random number array...'))
      * 
-     * generate.run([100]).then((result: number[]) => console.log(result))
+     * generate.run(100).then((result: number[]) => console.log(result))
      * console.log('Doing other work in the meantime...')
      * ```
      */
@@ -461,7 +461,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * }, { idleTimeout: 0 })
      * 
      * sumThread.once('close', () => console.log('sumThread has finished operation and is shutting down...'))
-     * sumThread.run([0, 1_000_000]).then((sum: number) => console.log(sum))
+     * sumThread.run(0, 1_000_000).then((sum: number) => console.log(sum))
      * ```
      */
     public once(eventName: 'close', listener: (thread: Thread<T>) => void): this

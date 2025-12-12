@@ -4,7 +4,29 @@
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import { parentPort } from "worker_threads";
-import { AsyncFunction, getFunctionArgumentNames, getFunctionBody } from "./util";
+
+const AsyncFunction = async function () { }.constructor
+
+function getFunctionArgumentNames(fn: string | Function): string[] {
+    if (typeof fn === 'function') {
+        fn = fn.toString()
+    }
+    return fn.substring(fn.indexOf('(') + 1, fn.indexOf(')')).split(',')
+}
+
+function getFunctionBody(fn: string | Function): string {
+    if (typeof fn === 'function') {
+        fn = fn.toString()
+    }
+    if (fn.endsWith('}')) { // it's a function
+        // chop off the starting and ending brackets
+        return fn.substring(fn.indexOf('{') + 1, fn.length - 1).trim()
+    }
+    else { // it's an expression
+        // chop off the '() =>' or 'async () =>' then make it into a function that just returns the expression
+        return 'return ' + fn.substring(fn.indexOf('=>') + 2).trim()
+    }
+}
 
 interface WorkerSetRequest {
     action: 'set',
@@ -42,10 +64,11 @@ parentPort?.on('message', async (event: WorkerRequest) => {
             const fnArgNames: string[] = getFunctionArgumentNames(event.data)
             let fnBody: string = getFunctionBody(event.data)
             let fnIsAsync: boolean = event.data.startsWith('async')
-            if (fnBody.includes('SharedValue') && (!fnBody.includes('import("bun-threads")'))) {
-                fnBody = `const { SharedValue, SharedValueServer } = await import("${import.meta.dir}/sharedvalue");\n` + fnBody
-                fnIsAsync = true
-            }
+            // add this back in for future tagged mutex feature
+            // if (fnBody.includes('SharedValue') && (!fnBody.includes('import("bun-threads")'))) {
+            //     fnBody = `const { SharedValue, SharedValueServer } = await import("${import.meta.dir}/sharedvalue");\n` + fnBody
+            //     fnIsAsync = true
+            // }
             fn = fnIsAsync ? AsyncFunction(...fnArgNames, fnBody) : Function(...fnArgNames, fnBody)
         }
         else if (event.action === 'call') {

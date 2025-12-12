@@ -1,6 +1,6 @@
 {
   "name": "bun-threads",
-  "version": "2.0.0",
+  "version": "1.1.0",
   "author": "Taylor Reid",
   "repository": {
     "type": "git",
@@ -30,5 +30,6 @@
     "build": "bun build --entrypoints ./index.ts ./worker.ts --outdir ./dist --target bun --sourcemap=linked && tsc && rm dist/worker.d.ts && cp package.json dist/package.json && cp README.md dist/README.md && cp LICENSE dist/LICENSE",
     "typedoc": "typedoc index.ts --exclude \"scratch.ts\" --html docs"
   },
-  "type": "module"
+  "type": "module",
+  "types": "index.d.ts"
 }

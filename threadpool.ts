@@ -27,18 +27,18 @@ export interface ThreadPoolOptions extends Omit<ThreadOptions, 'threadpoolId'> {
  * 
  * let start = performance.now()
  * await Promise.all([,
- *     thread.run([1_000]),
- *     thread.run([1_000]),
- *     thread.run([1_000])
+ *     thread.run(1_000),
+ *     thread.run(1_000),
+ *     thread.run(1_000)
  * ])
  * // a single Thread can only execute synchronous tasks one at a time
  * console.log('Thread completed in:', performance.now() - start, 'ms') // ~ 3000 ms
  * 
  * start = performance.now()
  * await Promise.all([,
- *     threadPool.run([1_000]),
- *     threadPool.run([1_000]),
- *     threadPool.run([1_000])
+ *     threadPool.run(1_000),
+ *     threadPool.run(1_000),
+ *     threadPool.run(1_000)
  * ])
  * // ThreadPool runs each task in a separate Thread in parallel
  * console.log('ThreadPool completed in:', performance.now() - start, 'ms') // ~ 1000 ms
@@ -177,9 +177,9 @@ export class ThreadPool<T extends (...args: any) => any> {
      *     return 'hello world'
      * })
      * 
-     * tp.run([])
+     * tp.run()
      * console.log(`${tp.busy} thread in the ThreadPool is busy.`)
-     * tp.run([])
+     * tp.run()
      * console.log(`${tp.busy} threads in the ThreadPool are busy.`)
      * await tp.idle
      * console.log(`${tp.busy} threads in the ThreadPool are busy.`)
@@ -262,7 +262,7 @@ export class ThreadPool<T extends (...args: any) => any> {
      * import { ThreadPool } from "bun-threads";
      * 
      * const threadPool = new ThreadPool(() => { return 42 })
-     * console.log('The answer is:', await threadPool.run([]))
+     * console.log('The answer is:', await threadPool.run())
      * threadPool.close() // not calling close may cause the program to hang
      * ```
      */

@@ -5,4 +5,3 @@
 
 export { Thread, type ThreadOptions } from './thread'
 export { ThreadPool, type ThreadPoolOptions } from './threadpool'
-export { SharedValue, SharedValueServer } from './sharedvalue'
