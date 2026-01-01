@@ -32,7 +32,7 @@ describe(Thread, () => {
         })
         test('mutates to integer', async () => {
             const thread = new Thread(helloWorld)
-            await thread.run([])
+            await thread.run()
             expect(thread.id).toBeInteger()
             thread.close()
         })
@@ -55,7 +55,7 @@ describe(Thread, () => {
         })
         test('closes automatically', async () => {
             const thread = new Thread(helloWorld, { idleTimeout: 10 })
-            await thread.run([])
+            await thread.run()
             expect(thread.closed).toBeFalse()
             await Bun.sleep(15)
             expect(thread.closed).toBeTrue()
@@ -70,7 +70,7 @@ describe(Thread, () => {
         })
         test('side effects', async () => {
             const thread = new Thread(helloWorld)
-            await thread.run([])
+            await thread.run()
             expect(thread.closed).toBeFalse()
             await thread.close()
             expect(thread.closed).toBeTrue()
@@ -81,10 +81,10 @@ describe(Thread, () => {
             expect(new Thread(helloWorld).busy).toBeFalse()
         })
         test('side effects', async () => {
-            const thread = new Thread(() => {setTimeout(() => {}, 10)})
-            thread.run([]) // intentionally don't await
+            const thread = new Thread(() => { setTimeout(() => { }, 10) })
+            thread.run() // intentionally don't await
             expect(thread.busy).toBeTrue()
-            await Bun.sleep(15)
+            await Bun.sleep(100)
             expect(thread.busy).toBeFalse()
             thread.close()
         })
@@ -102,8 +102,8 @@ describe(Thread, () => {
                 await Bun.sleep(20)
                 return 2
             })
-            thread1.run([])
-            thread2.run([])
+            thread1.run()
+            thread2.run()
             const winner = await Promise.race([thread1.idle, thread2.idle])
             expect(winner).toStrictEqual(thread1)
             expect(winner).not.toStrictEqual(thread2)
@@ -113,43 +113,43 @@ describe(Thread, () => {
     })
     describe('.run()', () => {
         test('is on a separate thread', () => {
-            expect(new Thread(() => Bun.isMainThread).run([])).resolves.toBeFalse()
+            expect(new Thread(() => Bun.isMainThread).run()).resolves.toBeFalse()
         })
         test('returns as expected for synchronous expressions', () => {
-            expect(new Thread(() => Bun.isMainThread).run([])).resolves.toBeFalse()
-            expect(new Thread(() => typeof Bun !== "undefined").run([])).resolves.toBeTrue()
-            expect(new Thread(() => import("os").then((os) => os.EOL)).run([])).resolves.toBeOneOf(['\n', '\r\n'])
+            expect(new Thread(() => Bun.isMainThread).run()).resolves.toBeFalse()
+            expect(new Thread(() => typeof Bun !== "undefined").run()).resolves.toBeTrue()
+            expect(new Thread(() => import("os").then((os) => os.EOL)).run()).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for synchronous functions', () => {
-            expect(new Thread(add).run([2, 3])).resolves.toBe(5)
-            expect(new Thread(subtract).run([2, 3])).resolves.toBe(-1)
-            expect(new Thread(helloWorld).run([])).resolves.toBe('hello world')
+            expect(new Thread(add).run(2, 3)).resolves.toBe(5)
+            expect(new Thread(subtract).run(2, 3)).resolves.toBe(-1)
+            expect(new Thread(helloWorld).run()).resolves.toBe('hello world')
         })
         test('returns as expected for asynchronous expressions', () => {
-            expect(new Thread(async () => Promise.resolve(Bun.isMainThread)).run([])).resolves.toBeFalse()
-            expect(new Thread(async () => Promise.resolve(typeof Bun !== "undefined")).run([])).resolves.toBeTrue()
-            expect(new Thread(async () => Promise.resolve(import("os").then((os) => os.EOL))).run([])).resolves.toBeOneOf(['\n', '\r\n'])
+            expect(new Thread(async () => Promise.resolve(Bun.isMainThread)).run()).resolves.toBeFalse()
+            expect(new Thread(async () => Promise.resolve(typeof Bun !== "undefined")).run()).resolves.toBeTrue()
+            expect(new Thread(async () => Promise.resolve(import("os").then((os) => os.EOL))).run()).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for asynchronous functions', () => {
             const thread = new Thread(async () => {
                 await Bun.sleep(1)
                 return 42
             })
-            expect(thread.run([])).resolves.toBe(42)
+            expect(thread.run()).resolves.toBe(42)
             thread.close()
         })
         test('rejects with Error', () => {
             const thread = new Thread(() => { throw new Error('TEST ERROR') })
-            expect(thread.run([])).rejects.toThrowError('TEST ERROR')
+            expect(thread.run()).rejects.toThrowError('TEST ERROR')
             thread.close()
         })
         test('resolves only for the correct call', () => {
             // commenting out the if (event.id === id) in run()'s internal check() function causes this test to fail
             const thread = new Thread(sum)
-            const p1 = thread.run([1_000_000]) // 499999500000
-            const p2 = thread.run([1_000]) // 499500 
-            const p3 = thread.run([100]) // 4950
-            const p4 = thread.run([10])  // 45
+            const p1 = thread.run(1_000_000) // 499999500000
+            const p2 = thread.run(1_000) // 499500 
+            const p3 = thread.run(100) // 4950
+            const p4 = thread.run(10)  // 45
             expect(p1).resolves.toBe(499999500000)
             expect(p2).resolves.toBe(499500)
             expect(p3).resolves.toBe(4950)
@@ -160,15 +160,15 @@ describe(Thread, () => {
         test('returns as expected', () => {
             const thread = new Thread(helloWorld)
             expect(thread.close()).resolves.toBeFalse()
-            thread.run([])
+            thread.run()
             expect(thread.close()).resolves.toBeTrue()
             expect(thread.close()).resolves.toBeFalse()
         })
     })
     test('events', () => {
         const thread = new Thread(helloWorld)
-        expect(thread.on('busy', () => {})).toStrictEqual(thread)
-        expect(thread.prependListener('busy', () => {})).toStrictEqual(thread)
+        expect(thread.on('busy', () => { })).toStrictEqual(thread)
+        expect(thread.prependListener('busy', () => { })).toStrictEqual(thread)
     })
 })
 
@@ -340,16 +340,16 @@ describe(ThreadPool, () => {
         })
         test('increases', () => {
             const tp = new ThreadPool(helloWorld)
-            tp.run([])
+            tp.run()
             expect(tp.busy).toBe(1)
-            tp.run([])
+            tp.run()
             expect(tp.busy).toBe(2)
             tp.close()
         })
         test('decreases', async () => {
             const tp = new ThreadPool(helloWorld)
             for (let i = 0; i < tp.maxThreads; i++) {
-                tp.run([])
+                tp.run()
             }
             expect(tp.busy).toBe(tp.maxThreads)
             await tp.idle
@@ -362,7 +362,7 @@ describe(ThreadPool, () => {
         })
         test('mutates', async () => {
             const tp = new ThreadPool(helloWorld)
-            const promise = tp.run([])
+            const promise = tp.run()
             expect(Bun.peek.status(promise)).toBe('pending')
             await promise
             expect(Bun.peek.status(promise)).toBe('fulfilled')
@@ -370,40 +370,40 @@ describe(ThreadPool, () => {
     })
     describe('.run()', () => {
         test('is on a separate thread', () => {
-            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
+            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run()).resolves.toBeFalse()
         })
         test('returns as expected for synchronous expressions', () => {
-            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run([])).resolves.toBeFalse()
-            expect(new ThreadPool(() => typeof Bun !== "undefined", { idleTimeout: 0 }).run([])).resolves.toBeTrue()
-            expect(new ThreadPool(() => import("os").then((os) => os.EOL), { idleTimeout: 0 }).run([])).resolves.toBeOneOf(['\n', '\r\n'])
+            expect(new ThreadPool(() => Bun.isMainThread, { idleTimeout: 0 }).run()).resolves.toBeFalse()
+            expect(new ThreadPool(() => typeof Bun !== "undefined", { idleTimeout: 0 }).run()).resolves.toBeTrue()
+            expect(new ThreadPool(() => import("os").then((os) => os.EOL), { idleTimeout: 0 }).run()).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for synchronous functions', () => {
-            expect(new ThreadPool(add, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(5)
-            expect(new ThreadPool(subtract, { idleTimeout: 0 }).run([2, 3])).resolves.toBe(-1)
-            expect(new ThreadPool(helloWorld, { idleTimeout: 0 }).run([])).resolves.toBe('hello world')
+            expect(new ThreadPool(add, { idleTimeout: 0 }).run(2, 3)).resolves.toBe(5)
+            expect(new ThreadPool(subtract, { idleTimeout: 0 }).run(2, 3)).resolves.toBe(-1)
+            expect(new ThreadPool(helloWorld, { idleTimeout: 0 }).run()).resolves.toBe('hello world')
         })
         test('returns as expected for asynchronous expressions', () => {
-            expect(new ThreadPool(async () => Promise.resolve(Bun.isMainThread), { idleTimeout: 0 }).run([])).resolves.toBeFalse()
-            expect(new ThreadPool(async () => Promise.resolve(typeof Bun !== "undefined"), { idleTimeout: 0 }).run([])).resolves.toBeTrue()
-            expect(new ThreadPool(async () => Promise.resolve(import("os").then((os) => os.EOL)), { idleTimeout: 0 }).run([])).resolves.toBeOneOf(['\n', '\r\n'])
+            expect(new ThreadPool(async () => Promise.resolve(Bun.isMainThread), { idleTimeout: 0 }).run()).resolves.toBeFalse()
+            expect(new ThreadPool(async () => Promise.resolve(typeof Bun !== "undefined"), { idleTimeout: 0 }).run()).resolves.toBeTrue()
+            expect(new ThreadPool(async () => Promise.resolve(import("os").then((os) => os.EOL)), { idleTimeout: 0 }).run()).resolves.toBeOneOf(['\n', '\r\n'])
         })
         test('returns as expected for asynchronous functions', () => {
             const tp = new ThreadPool(async () => {
                 await Bun.sleep(1)
                 return 42
             })
-            expect(tp.run([])).resolves.toBe(42)
+            expect(tp.run()).resolves.toBe(42)
             tp.close()
         })
         test('rejects with Error', () => {
             const tp = new ThreadPool(() => { throw new Error('TEST ERROR') })
-            expect(tp.run([])).rejects.toThrowError('TEST ERROR')
+            expect(tp.run()).rejects.toThrowError('TEST ERROR')
             tp.close()
         })
         test('can run multiple threads concurrently', async () => {
             const tp = new ThreadPool(async () => { await Bun.sleep(100) })
-            const p1 = tp.run([])
-            const p2 = tp.run([])
+            const p1 = tp.run()
+            const p2 = tp.run()
             expect(Bun.peek.status(p1)).toBe('pending')
             expect(Bun.peek.status(p2)).toBe('pending')
             expect(tp['threads'][0]?.id).not.toBe(tp['threads'][1]?.id)
