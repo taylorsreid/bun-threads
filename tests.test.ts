@@ -5,8 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { Thread } from "./thread";
-import { ThreadPool } from './threadpool';
+import { Mutex, Thread, ThreadPool } from './index';
 
 const helloWorld = () => {
     return 'hello world'
@@ -412,5 +411,173 @@ describe(ThreadPool, () => {
             expect(Bun.peek.status(p2)).toBe('fulfilled')
             tp.close()
         })
+    })
+})
+
+describe(Mutex, () => {
+    describe('static', async () => {
+        test('exists', async () => {
+            expect(await Mutex.exists('staticexists')).toBeFalse()
+            ;(await Mutex.lock('staticexists')).release()
+            expect(await Mutex.exists('staticexists')).toBeTrue()
+        })
+        test('waiting', async () => {
+            expect(await Mutex.waiting('staticwaiting')).toBe(0)
+            const m1 = await new Mutex('staticwaiting').lock()
+            const m2 = new Mutex('staticwaiting').lock()
+            expect(await Mutex.waiting('staticwaiting')).toBe(2)
+            m1.release()
+            ;(await m2).release()
+        })
+        test('lock', () => {
+            expect(Mutex.lock('staticlock')).resolves.toBeInstanceOf(Mutex)
+        })
+    })
+    describe('instance', () => {
+        test('constructor', async () => {
+            const m = new Mutex('constructor')
+            expect(m.key).toBe('constructor')
+            expect(m['id']).toBeUndefined()
+            expect(await m.waiting).toBe(1)
+            expect(m.locked).toBeFalse()
+        })
+        describe('lock', () => {
+            describe('side effects', async () => {
+                test('causes id to be defined', async () => {
+                    const m = await new Mutex('id').lock()
+                    expect(m['id']).toBeTypeOf('string')
+                    m.release()
+                })
+                test('causes waiting to increment', async () => {
+                    const m1 = await new Mutex('waiting').lock()
+                    const m2 = new Mutex('waiting').lock()
+                    expect(await m1.waiting).toBe(2)
+                    m1.release()
+                    ;(await m2).release()
+                })
+                test('causes locked to be true', async () => {
+                    const m = await new Mutex('locked').lock()
+                    expect(m.locked).toBeTrue()
+                    m.release()
+                    expect(m.locked).toBeFalse()
+                })
+            })
+            test('resolves when queue is empty', async () => {
+                const m = await new Mutex('empty').lock()
+                expect(m).toBeInstanceOf(Mutex)
+                m.release()
+            })
+            // test('resolves in order', async () => {
+            //     const result: number[] = []
+            //     await Promise.all([
+            //         Mutex.lock('order').then(m => {
+            //             result.push(1)
+            //             m.release()
+            //         }),
+            //         Mutex.lock('order').then(m => {
+            //             result.push(0)
+            //             m.release()
+            //         })
+            //     ])
+            // })
+            test('pending when queue is not empty', async () => {
+                const m1 = await new Mutex('notempty').lock()
+                const m2 = new Mutex('notempty').lock()
+                expect(Bun.peek.status(m2)).toBe('pending')
+                await Bun.sleep(100) // make sure it's not just pending because it was just created
+                expect(Bun.peek.status(m2)).toBe('pending')
+                m1.release()
+                expect(await m2).toBeInstanceOf(Mutex)
+                expect(Bun.peek.status(m2)).toBe('fulfilled')
+                ;(await m2).release()
+            })
+            test('rejects when cancelled', async () => {
+                const m1: Mutex = await new Mutex('rejectoncancel').lock()
+                const m2: Mutex = new Mutex('rejectoncancel')
+                const result: Promise<Mutex> = m2.lock()
+                m2.cancel()
+                expect(result).rejects.toBeInstanceOf(Error)
+                m1.release()
+            })
+            test('rejects on timeout', async () => {
+                const m1: Mutex = await new Mutex('rejectontimeout').lock()
+                const m2: Mutex = new Mutex('rejectontimeout')
+                expect(m2.lock(10)).rejects.toBeInstanceOf(Error)
+                m1.release()
+            })
+        })
+        describe('cancel', () => {
+            test('returns true on a valid cancel request', () => {
+                const m = new Mutex('cancelreturnstrue')
+                m.lock()
+                expect(m.cancel()).toBeTrue()
+                m.release()
+            })
+            test('returns false on an invalid cancel request', async () => {
+                const m = new Mutex('cancelreturnsfalse')
+                expect(m.cancel()).toBeFalse()
+                await m.lock()
+                m.release()
+                expect(m.cancel()).toBeFalse()
+            })
+        })
+        describe('release', () => {
+            test('side effects', async () => {
+                const m = await new Mutex('releasesides').lock()
+                m.release()
+                expect(m.locked).toBeFalse()
+                expect(m['id']).toBeUndefined()
+                expect(await m.waiting).toBe(0)
+            })
+            test('returns true when locked', async () => {
+                const m = await new Mutex('releasereturnstrue').lock()
+                expect(m.release()).toBeTrue()
+            })
+            test('returns false when not locked', async () => {
+                const m = await new Mutex('releasereturnstrue').lock()
+                m.release()
+                expect(m.release()).toBeFalse()
+            })
+        })
+    })
+    describe('practical', () => {
+        test('can run in a Thread', async () => {
+            const thread = new Thread(async () => {
+                const Mutex = (await import('./mutex')).Mutex
+                ;(await Mutex.lock('thread')).release()
+                return true
+            })
+            expect(await thread.run()).toBeTrue()
+        })
+        test('can run in a ThreadPool', async () => {
+            const tp = new ThreadPool(async () => {
+                const Mutex = (await import('./mutex')).Mutex
+                ;(await Mutex.lock('thread')).release()
+                return true
+            })
+            expect(await tp.run()).toBeTrue()
+        })
+        // test('can run cross thread', async () => {
+        //     // getEnvironmentData()
+        //     const threadOne = new Thread(async () => {
+        //         const Mutex = (await import('./mutex')).Mutex
+        //         const setEnvironmentData = (await import('worker_threads')).setEnvironmentData
+
+        //         const mutex = await Mutex.lock('crossthread')
+        //         setEnvironmentData('foo', 'bar')
+        //         mutex.release()
+        //     })
+        //     const threadTwo = new Thread(async () => {
+        //         const Mutex = (await import('./mutex')).Mutex
+        //         const getEnvironmentData = (await import('worker_threads')).getEnvironmentData
+
+        //         const mutex = await Mutex.lock('crossthread')
+        //         const value = getEnvironmentData('foo')
+        //         mutex.release()
+        //         return value as string
+        //     })
+        //     await threadOne.run()
+        //     expect(await threadTwo.run()).toBe('bar')
+        // })
     })
 })
