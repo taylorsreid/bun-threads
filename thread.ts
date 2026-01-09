@@ -202,7 +202,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * If your callback function does not have arguments, you still must pass an empty array.
      * This is required for TypeScript to be able infer arguments.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * @returns A `Promise<ReturnType<T>>` that resolves to the return type of your callback function.
+     * @returns A `Promise<Awaited<ReturnType<T>>>` that resolves to the return type of your callback function.
      */
     public async run(...args: Parameters<T>): Promise<Awaited<ReturnType<T>>> {
         return new Promise<Awaited<ReturnType<T>>>((resolve, reject) => {
