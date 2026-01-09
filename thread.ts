@@ -204,8 +204,8 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
      * @returns A `Promise<ReturnType<T>>` that resolves to the return type of your callback function.
      */
-    public async run(...args: Parameters<T>): Promise<ReturnType<T>> {
-        return new Promise<ReturnType<T>>((resolve, reject) => {
+    public async run(...args: Parameters<T>): Promise<Awaited<ReturnType<T>>> {
+        return new Promise<Awaited<ReturnType<T>>>((resolve, reject) => {
             // check if the worker has closed, and if it has, create a new one and update the function
             if (typeof this.worker === 'undefined') {
                 this.worker = new Worker(import.meta.dir + "/worker")

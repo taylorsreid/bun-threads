@@ -226,7 +226,7 @@ export class ThreadPool<T extends (...args: any) => any> {
     }
 
     /** {@inheritDoc Thread.run} */
-    public async run(...args: Parameters<T>): Promise<ReturnType<T>> {
+    public async run(...args: Parameters<T>): Promise<Awaited<ReturnType<T>>> {
 
         // run through a decision tree to select which thread to use, prevents just reusing the same thread over and over
         let winner: Thread<T> | undefined
