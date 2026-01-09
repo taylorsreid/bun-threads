@@ -34,8 +34,6 @@ bun add bun-threads
 ```
 
 ## ❓ FAQ
-### What's different from version 1.0.x?
-- You no longer have to pass arguments to Thread.run() or ThreadPool.run() as arrays. Intellisense should now pick up on argument types and amounts automatically.
 
 ### Why not just use one of the existing libraries that does this like workerpool, multithreading.io, tinypool, poolifier, threads.js, etc?
 - They're great projects, but they either don't work properly in Bun (workerpool is *almost* there), or they require that you to create a separate worker file, which is something that this library aims to avoid.
@@ -115,3 +113,10 @@ console.log('ThreadPool completed in:', performance.now() - start, 'ms') // ~ 10
 thread.close()
 threadPool.close()
 ```
+
+## Changelog
+### 1.1.1
+- Fixed nested promises in ```Thread.run()``` and ```ThreadPool.run()``` return types. Example: Both methods will now return ```Promise<string>``` instead of ```Promise<Promise<string>>```.
+
+### 1.1.0
+- You no longer have to pass arguments to Thread.run() or ThreadPool.run() as arrays. Intellisense should now pick up on argument types and amounts automatically.
