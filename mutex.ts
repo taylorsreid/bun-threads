@@ -31,7 +31,7 @@ type ServerMessage = {
     action: 'resolve_exists',
     key: string,
     value: boolean
-} |  {
+} | {
     action: 'resolve_waiting',
     value: number
 } | {
@@ -109,7 +109,7 @@ export class Mutex {
                     bc.close()
                 }
             }
-            bc.postMessage({ action: 'lock', id: this.id, key: this.key})
+            bc.postMessage({ action: 'lock', id: this.id, key: this.key })
             if (typeof timeout === 'number') {
                 Bun.sleep(timeout).then(() => reject(new Error(`Timed out while waiting for lock for key "${this.key}" after ${timeout} milliseconds.`)))
             }
@@ -143,58 +143,58 @@ export class Mutex {
         }
         return false
     }
-
 }
 
-const kv: { [key: string]: string[] } = {}
-const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-mutex`).unref()
-
-// @ts-expect-error
-bc.onmessage = async (rawMessage: MessageEvent) => {
-    const message: ClientMessage = rawMessage.data
-    switch (message.action) {
-        case "exists":
-            bc.postMessage({
-                action: 'resolve_exists',
-                key: message.key,
-                value: typeof kv[message.key] !== 'undefined'
-            })
-            break;
-        case "lock":
-            kv[message.key] ??= []
-            if (kv[message.key]!.length === 0) { // if the queue is empty, resolve lock immediately
+if (Bun.isMainThread) {
+    const kv: { [key: string]: string[] } = {}
+    const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-mutex`).unref()
+    // @ts-expect-error
+    bc.onmessage = async (rawMessage: MessageEvent) => {
+        const message: ClientMessage = rawMessage.data
+        switch (message.action) {
+            case "exists":
                 bc.postMessage({
-                    action: 'resolve_lock',
-                    id: message.id
+                    action: 'resolve_exists',
+                    key: message.key,
+                    value: typeof kv[message.key] !== 'undefined'
                 })
-            }
-            kv[message.key]!.push(message.id) // push to queue either way
-            break;
-        case "release":
-            if (typeof kv[message.key] !== 'undefined') {
-                kv[message.key]!.shift()
-                if (kv[message.key]![0]) { // if there's still waiters, resolve the first in line's lock
+                break;
+            case "lock":
+                kv[message.key] ??= []
+                if (kv[message.key]!.length === 0) { // if the queue is empty, resolve lock immediately
                     bc.postMessage({
                         action: 'resolve_lock',
-                        id: kv[message.key]![0]
+                        id: message.id
                     })
                 }
-            }
-            break;
-        case "waiting":
-            bc.postMessage({
-                action: 'resolve_waiting',
-                value: kv[message.key]?.length ?? 0
-            })
-            break;
-        case "cancel":
-            if (typeof kv[message.key] !== 'undefined') {
-                kv[message.key]!.splice(kv[message.key]!.indexOf(message.id), 1)
+                kv[message.key]!.push(message.id) // push to queue either way
+                break;
+            case "release":
+                if (typeof kv[message.key] !== 'undefined') {
+                    kv[message.key]!.shift()
+                    if (kv[message.key]![0]) { // if there's still waiters, resolve the first in line's lock
+                        bc.postMessage({
+                            action: 'resolve_lock',
+                            id: kv[message.key]![0]
+                        })
+                    }
+                }
+                break;
+            case "waiting":
                 bc.postMessage({
-                    action: 'reject_lock',
-                    id: message.id
+                    action: 'resolve_waiting',
+                    value: kv[message.key]?.length ?? 0
                 })
-            }
-            break;
+                break;
+            case "cancel":
+                if (typeof kv[message.key] !== 'undefined') {
+                    kv[message.key]!.splice(kv[message.key]!.indexOf(message.id), 1)
+                    bc.postMessage({
+                        action: 'reject_lock',
+                        id: message.id
+                    })
+                }
+                break;
+        }
     }
 }

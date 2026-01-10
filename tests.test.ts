@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { Mutex, Thread, ThreadPool } from './index';
+import { getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool } from './';
 
 const helloWorld = () => {
     return 'hello world'
@@ -557,6 +557,7 @@ describe(Mutex, () => {
             })
             expect(await tp.run()).toBeTrue()
         })
+
         // test('can run cross thread', async () => {
         //     // getEnvironmentData()
         //     const threadOne = new Thread(async () => {
@@ -579,5 +580,23 @@ describe(Mutex, () => {
         //     await threadOne.run()
         //     expect(await threadTwo.run()).toBe('bar')
         // })
+    })
+})
+
+describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
+    test('race condition', async () => {
+        const threadOne = new Thread(async () => {
+            return (await import('./')).setEnvironmentData('foo', 'bar')
+        })
+
+        const threadTwo = new Thread(async () => {
+            return (await import('./')).getEnvironmentData('foo')
+        })
+
+        await threadOne.run()
+        expect(await threadTwo.run()).toBe('bar')
+    }, {
+        repeats: 999, // 1000 total
+        timeout: 60_000
     })
 })

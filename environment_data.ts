@@ -1,7 +1,6 @@
-type Serializable = string | object | number | boolean | bigint;
+import { BroadcastChannel, type Serializable } from "worker_threads";
 
-export async function getEnvironmentData(key: Serializable): Promise<Serializable> {
-    console.log('get was called')
+export async function getEnvironmentData(key: string): Promise<Serializable> {
     return new Promise((resolve) => {
         const id: string = Bun.randomUUIDv7()
         const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-environment-data`).unref()
@@ -17,8 +16,7 @@ export async function getEnvironmentData(key: Serializable): Promise<Serializabl
     })
 }
 
-export async function setEnvironmentData(key: Serializable, value: Serializable): Promise<void> {
-    console.log('set was called')
+export async function setEnvironmentData(key: string, value: Serializable): Promise<void> {
     return new Promise((resolve) => {
         const id: string = Bun.randomUUIDv7()
         const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-environment-data`).unref()
@@ -34,22 +32,22 @@ export async function setEnvironmentData(key: Serializable, value: Serializable)
     })
 }
 
-const kv: { [key:string]: Serializable } = {}
-const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-environment-data`).unref()
-// @ts-ignore
-bc.onmessage = (msg: MessageEvent) => {
-    console.log(msg.data)
-    if ('key' in msg.data && 'value' in msg.data) {
-        kv[msg.data.key] = msg.data.value
-        bc.postMessage({
-            id: msg.data.id
-        })
+if (Bun.isMainThread) {
+    const kv: { [key: string]: Serializable } = {}
+    const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-environment-data`).unref()
+    // @ts-ignore
+    bc.onmessage = (msg: MessageEvent) => {
+        if ('key' in msg.data && 'value' in msg.data) {
+            kv[msg.data.key] = msg.data.value
+            bc.postMessage({
+                id: msg.data.id
+            })
+        }
+        else if ('key' in msg.data) {
+            bc.postMessage({
+                id: msg.data.id,
+                value: kv[msg.data.key]
+            })
+        }
     }
-    else if ('key' in msg.data) {
-        bc.postMessage({
-            id: msg.data.id,
-            value: kv[msg.data.key]
-        })
-    }
-    
 }
