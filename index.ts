@@ -5,5 +5,4 @@
 
 export { Thread, type ThreadOptions } from './thread'
 export { ThreadPool, type ThreadPoolOptions } from './threadpool'
-export { Mutex } from './mutex'
-export { getEnvironmentData, setEnvironmentData } from './environment_data'
+export { getEnvironmentData, setEnvironmentData, Mutex, Coordinator } from './crossthread_utils'

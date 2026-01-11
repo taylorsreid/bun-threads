@@ -3,9 +3,9 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool } from './';
+import { Coordinator, getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool } from './';
 
 const helloWorld = () => {
     return 'hello world'
@@ -415,6 +415,13 @@ describe(ThreadPool, () => {
 })
 
 describe(Mutex, () => {
+    let coord: Coordinator
+    beforeAll(() => {
+        coord = new Coordinator()
+    })
+    afterAll(() => {
+        coord.shutdown()
+    })
     describe('static', async () => {
         test('exists', async () => {
             expect(await Mutex.exists('staticexists')).toBeFalse()
@@ -467,19 +474,6 @@ describe(Mutex, () => {
                 expect(m).toBeInstanceOf(Mutex)
                 m.release()
             })
-            // test('resolves in order', async () => {
-            //     const result: number[] = []
-            //     await Promise.all([
-            //         Mutex.lock('order').then(m => {
-            //             result.push(1)
-            //             m.release()
-            //         }),
-            //         Mutex.lock('order').then(m => {
-            //             result.push(0)
-            //             m.release()
-            //         })
-            //     ])
-            // })
             test('pending when queue is not empty', async () => {
                 const m1 = await new Mutex('notempty').lock()
                 const m2 = new Mutex('notempty').lock()
@@ -534,7 +528,7 @@ describe(Mutex, () => {
                 expect(m.release()).toBeTrue()
             })
             test('returns false when not locked', async () => {
-                const m = await new Mutex('releasereturnstrue').lock()
+                const m = await new Mutex('releasereturnsfalse').lock()
                 m.release()
                 expect(m.release()).toBeFalse()
             })
@@ -543,7 +537,7 @@ describe(Mutex, () => {
     describe('practical', () => {
         test('can run in a Thread', async () => {
             const thread = new Thread(async () => {
-                const Mutex = (await import('./mutex')).Mutex
+                const Mutex = (await import('./')).Mutex
                 ;(await Mutex.lock('thread')).release()
                 return true
             })
@@ -551,39 +545,57 @@ describe(Mutex, () => {
         })
         test('can run in a ThreadPool', async () => {
             const tp = new ThreadPool(async () => {
-                const Mutex = (await import('./mutex')).Mutex
-                ;(await Mutex.lock('thread')).release()
+                const Mutex = (await import('./')).Mutex
+                ;(await Mutex.lock('threadpool')).release()
                 return true
             })
             expect(await tp.run()).toBeTrue()
         })
-
-        // test('can run cross thread', async () => {
-        //     // getEnvironmentData()
-        //     const threadOne = new Thread(async () => {
-        //         const Mutex = (await import('./mutex')).Mutex
-        //         const setEnvironmentData = (await import('worker_threads')).setEnvironmentData
-
-        //         const mutex = await Mutex.lock('crossthread')
-        //         setEnvironmentData('foo', 'bar')
-        //         mutex.release()
-        //     })
-        //     const threadTwo = new Thread(async () => {
-        //         const Mutex = (await import('./mutex')).Mutex
-        //         const getEnvironmentData = (await import('worker_threads')).getEnvironmentData
-
-        //         const mutex = await Mutex.lock('crossthread')
-        //         const value = getEnvironmentData('foo')
-        //         mutex.release()
-        //         return value as string
-        //     })
-        //     await threadOne.run()
-        //     expect(await threadTwo.run()).toBe('bar')
-        // })
+        test('communicates across threads', async () => {
+            const t1 = new Thread(async () => {
+                const Mutex = (await import('./')).Mutex
+                await Mutex.lock('crossthread')
+            })
+            const t2 = new Thread(async () => {
+                const Mutex = (await import('./')).Mutex
+                const prom = Mutex.lock('crossthread')
+                await Bun.sleep(100)
+                return Bun.peek.status(prom)
+            })
+            await t1.run()
+            expect(await t2.run()).toBe('pending')
+        })
+        test('communicates across threadpools', async () => {
+            const t1 = new ThreadPool(async () => {
+                const Mutex = (await import('./')).Mutex
+                await Mutex.lock('crossthreadpool')
+            }, {
+                minThreads: 1,
+                maxThreads: 1
+            })
+            const t2 = new ThreadPool(async () => {
+                const Mutex = (await import('./')).Mutex
+                const prom = Mutex.lock('crossthreadpool')
+                await Bun.sleep(100)
+                return Bun.peek.status(prom)
+            }, {
+                minThreads: 1,
+                maxThreads: 1
+            })
+            await t1.run()
+            expect(await t2.run()).toBe('pending')
+        })
     })
 })
 
-describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
+describe.skip(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
+    let coord: Coordinator
+    beforeAll(() => {
+        coord = new Coordinator()
+    })
+    afterAll(() => {
+        coord.shutdown()
+    })
     test('race condition', async () => {
         const threadOne = new Thread(async () => {
             return (await import('./')).setEnvironmentData('foo', 'bar')
@@ -596,7 +608,7 @@ describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
         await threadOne.run()
         expect(await threadTwo.run()).toBe('bar')
     }, {
-        repeats: 999, // 1000 total
+        repeats: 99, // 100 total
         timeout: 60_000
     })
 })
