@@ -256,7 +256,7 @@ export class ThreadPool<T extends (...args: any) => any> {
     /**
      * Close all of the {@link Thread Threads} in the pool. It is safe to call this method more than once, as subsequent calls result in a no-op.
      * @param [force=false] This method will wait for the `Thread` to finish its queued tasks unless `force` is set to `true`. Default is `false`.
-     * @returns a Promise\<number\> that resolves to the amount of open threads that were actually closed (how many `Thread.close()` calls returned `true`).
+     * @returns a `Promise<number>` that resolves to the amount of open threads that were actually closed (how many `Thread.close()` calls returned `true`).
      * @example
      * ```ts
      * import { ThreadPool } from "bun-threads";

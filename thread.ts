@@ -199,7 +199,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * If your callback function does not have arguments, you still must pass an empty array.
      * This is required for TypeScript to be able infer arguments.
      * Argument types must be serializable using the {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Structured_clone_algorithm#supported_types structuredClone()} algorithm.
-     * @returns A `Promise<Awaited<ReturnType<T>>>` that resolves to the return type of your callback function.
+     * @returns a `Promise<Awaited<ReturnType<T>>>` that resolves to the return type of your callback function.
      */
     public async run(...args: Parameters<T>): Promise<Awaited<ReturnType<T>>> {
         return new Promise<Awaited<ReturnType<T>>>((resolve, reject) => {
@@ -252,7 +252,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * Terminate the underlying worker. It is safe to call this method more than once, as subsequent calls result in a no-op.
      * @param [force=false] This method will wait for the `Thread` to finish its queued tasks unless `force` is set to true. Default is `false`.
      * @see {@link busy}, {@link idle}, and/or {@link queued} on how to check first whether the thread has completed its task.
-     * @returns A Promise\<boolean\> that resolves to whether the underlying worker was actually terminated. `true` if the worker was terminated, `false` if the worker was already terminated (a no-op).
+     * @returns a `Promise<boolean>` that resolves to whether the underlying worker was actually terminated. `true` if the worker was terminated, `false` if the worker was already terminated (a no-op).
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -293,7 +293,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * Multiple calls passing the same combination of `idle` and `listener` will result in the `listener` being added, and called, multiple times.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -327,7 +327,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * Multiple calls passing the same combination of `busy` and `listener` will result in the `listener` being added, and called, multiple times.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -359,7 +359,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * Multiple calls passing the same combination of `close` and `listener` will result in the `listener` being added, and called, multiple times.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -394,7 +394,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * This event fires every time a thread has completed all of its pending tasks.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependOnceListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -418,7 +418,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * This event fires every time a thread has switched from an idle state to working on a task.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependOnceListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
@@ -443,7 +443,7 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
      * This event fires once when a thread has closed its underlying worker object.
      * By default, event listeners are invoked in the order they are added. The `emitter.prependOnceListener()` method can be used as an alternative to add the
      * event listener to the beginning of the listeners array.
-     * @returns A reference to the `EventEmitter`, so that calls can be chained.
+     * @returns a reference to the `EventEmitter`, so that calls can be chained.
      * @example
      * ```ts
      * import { Thread } from "bun-threads";
