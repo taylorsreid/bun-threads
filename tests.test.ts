@@ -5,7 +5,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { Coordinator, getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool } from './';
+import { Coordinator, getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool, TimeoutError } from './';
 
 const helloWorld = () => {
     return 'hello world'
@@ -588,7 +588,7 @@ describe(Mutex, () => {
     })
 })
 
-describe.skip(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
+describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
     let coord: Coordinator
     beforeAll(() => {
         coord = new Coordinator()
@@ -596,19 +596,25 @@ describe.skip(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
     afterAll(() => {
         coord.shutdown()
     })
-    test('race condition', async () => {
-        const threadOne = new Thread(async () => {
-            return (await import('./')).setEnvironmentData('foo', 'bar')
+    describe(setEnvironmentData, () => {
+        test('resolves', () => {
+            expect(setEnvironmentData('foo', 'bar')).resolves.toBeUndefined()
         })
-
-        const threadTwo = new Thread(async () => {
-            return (await import('./')).getEnvironmentData('foo')
+        test('rejects', () => {
+            coord.shutdown()
+            expect(setEnvironmentData('foo', 'bar', 0)).rejects.toThrowError(TimeoutError)
+            coord = new Coordinator()
         })
-
-        await threadOne.run()
-        expect(await threadTwo.run()).toBe('bar')
-    }, {
-        repeats: 99, // 100 total
-        timeout: 60_000
+    })
+    describe(getEnvironmentData, () => {
+        test('resolves', async () => {
+            await setEnvironmentData('foo', 'bar')
+            expect(await getEnvironmentData('foo')).toBe('bar')
+        })
+        test('rejects', async () => {
+            coord.shutdown()
+            expect(getEnvironmentData('foo')).rejects.toThrowError(TimeoutError)
+            coord = new Coordinator()
+        })
     })
 })
