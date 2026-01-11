@@ -15,7 +15,6 @@ export interface ThreadOptions {
      * @default 0
      */
     idleTimeout?: number,
-    threadpoolId?: string
 }
 
 /**
@@ -25,7 +24,6 @@ export interface ThreadOptions {
 export class Thread<T extends (...args: any) => any> extends EventEmitter {
     private worker: Worker | undefined
     private timer: Timer | undefined
-    private threadpoolId: string | undefined
 
     private _queued: number;
     /**
@@ -193,7 +191,6 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
         this.fn = fn
         this.idleTimeout = options?.idleTimeout ?? 0
         this._queued = 0 // bypass setter to avoid emitting idle state
-        this.threadpoolId = options?.threadpoolId
     }
 
     /**
@@ -211,7 +208,6 @@ export class Thread<T extends (...args: any) => any> extends EventEmitter {
                 this.worker = new Worker(import.meta.dir + "/worker")
                 this.worker.postMessage({
                     action: 'set',
-                    id: this.threadpoolId,
                     data: this.fn.toString()
                 })
             }

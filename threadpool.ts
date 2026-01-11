@@ -6,7 +6,7 @@
 import { availableParallelism } from "os";
 import { Thread, type ThreadOptions } from "./thread";
 
-export interface ThreadPoolOptions extends Omit<ThreadOptions, 'threadpoolId'> {
+export interface ThreadPoolOptions extends ThreadOptions {
     /** {@inheritDoc ThreadPool.minThreads} */
     minThreads?: number,
     /** {@inheritDoc ThreadPool.maxThreads} */

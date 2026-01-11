@@ -64,11 +64,6 @@ parentPort?.on('message', async (event: WorkerRequest) => {
             const fnArgNames: string[] = getFunctionArgumentNames(event.data)
             let fnBody: string = getFunctionBody(event.data)
             let fnIsAsync: boolean = event.data.startsWith('async')
-            // add this back in for future tagged mutex feature
-            // if (fnBody.includes('SharedValue') && (!fnBody.includes('import("bun-threads")'))) {
-            //     fnBody = `const { SharedValue, SharedValueServer } = await import("${import.meta.dir}/sharedvalue");\n` + fnBody
-            //     fnIsAsync = true
-            // }
             fn = fnIsAsync ? AsyncFunction(...fnArgNames, fnBody) : Function(...fnArgNames, fnBody)
         }
         else if (event.action === 'call') {
