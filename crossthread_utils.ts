@@ -53,8 +53,24 @@ type BunThreadsMessage = {
     id: string
 }
 
-export async function getEnvironmentData(key: string): Promise<Serializable> {
-    return new Promise((resolve) => {
+export class TimeoutError extends Error {
+    constructor(message?: string, options?: ErrorOptions) {
+        super(message, options)
+        this.name = 'TimeoutError'
+        Object.setPrototypeOf(this, TimeoutError.prototype)
+    }
+}
+
+export class LockCancelError extends Error {
+    constructor(message?: string, options?: ErrorOptions) {
+        super(message, options)
+        this.name = 'LockCancelError'
+        Object.setPrototypeOf(this, LockCancelError.prototype)
+    }
+}
+
+export async function getEnvironmentData(key: string, timeout: number = 100): Promise<Serializable> {
+    return new Promise((resolve, reject) => {
         const id: string = Bun.randomUUIDv7()
         const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
         // @ts-ignore
@@ -65,11 +81,15 @@ export async function getEnvironmentData(key: string): Promise<Serializable> {
             }
         }
         bc.postMessage({ action: 'data_get', id, key })
+        Bun.sleep(timeout).then(() => {
+            reject(new TimeoutError(`getEnvironmentData('${key}') timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+            bc.close()
+        })
     })
 }
 
-export async function setEnvironmentData(key: string, value: Serializable): Promise<void> {
-    return new Promise((resolve) => {
+export async function setEnvironmentData(key: string, value: Serializable, timeout: number = 100): Promise<void> {
+    return new Promise((resolve, reject) => {
         const id: string = Bun.randomUUIDv7()
         const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
         // @ts-ignore
@@ -80,6 +100,10 @@ export async function setEnvironmentData(key: string, value: Serializable): Prom
             }
         }
         bc.postMessage({ action: 'data_set', id, key, value })
+        Bun.sleep(timeout).then(() => {
+            reject(new TimeoutError(`setEnvironmentData('${key}', ${value.toString()}) timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+            bc.close()
+        })
     })
 }
 
@@ -101,7 +125,7 @@ export class Mutex {
         this._locked = false
     }
 
-    public static async exists(key: string, timeout: number = 2_000): Promise<boolean> {
+    public static async exists(key: string, timeout: number = 100): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
             // @ts-expect-error
@@ -112,12 +136,15 @@ export class Mutex {
                 }
             }
             bc.postMessage({ action: 'mutex_exists', key })
-            Bun.sleep(timeout).then(() => reject(new Error(`Timed out while waiting for mutex exists: ${key}`)))
+            Bun.sleep(timeout).then(() => {
+                reject(new TimeoutError(`Mutex.exists('${key}') timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+                bc.close()
+            })
         })
     }
 
-    public static async waiting(key: string): Promise<number> {
-        return new Promise<number>((resolve) => {
+    public static async waiting(key: string, timeout: number = 100): Promise<number> {
+        return new Promise<number>((resolve, reject) => {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
             // @ts-expect-error
             bc.onmessage = (ev: MessageEvent<BunThreadsMessage>) => {
@@ -127,6 +154,10 @@ export class Mutex {
                 }
             }
             bc.postMessage({ action: 'mutex_waiting', key })
+            Bun.sleep(timeout).then(() => {
+                reject(new TimeoutError(`Mutex.waiting('${key}') timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+                bc.close()
+            })
         })
     }
 
@@ -146,13 +177,16 @@ export class Mutex {
                     bc.close()
                 }
                 else if (ev.data.action === 'mutex_reject_lock' && ev.data.id === this.id) {
-                    reject(new Error(`Lock request for key "${this.key}" was cancelled.`))
+                    reject(new LockCancelError(`Lock request for key "${this.key}" was canceled.`))
                     bc.close()
                 }
             }
             bc.postMessage({ action: 'mutex_lock', id: this.id, key: this.key })
             if (typeof timeout === 'number') {
-                Bun.sleep(timeout).then(() => reject(new Error(`Timed out while waiting for mutex lock for key "${this.key}" after ${timeout} milliseconds.`)))
+                Bun.sleep(timeout).then(() => {
+                    reject(new TimeoutError(`mutex.lock() for key '${this.key}' timed out after ${timeout} ms. The mutex is either still locked or a Coordinator class is not running somewhere in your code.`))
+                    bc.close()
+                })
             }
         })
     }
@@ -165,6 +199,7 @@ export class Mutex {
                 id: this.id,
                 key: this.key
             })
+            bc.close()
             return true
         }
         return false
