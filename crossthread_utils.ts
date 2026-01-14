@@ -25,6 +25,7 @@ type BunThreadsMessage = {
     action: 'mutex_lock',
     id: string,
     key: string
+    priority?: true
 } | {
     action: 'mutex_cancel',
     id: string,
@@ -53,6 +54,9 @@ type BunThreadsMessage = {
     id: string
 }
 
+/**
+ * Thrown/rejected when an asynchronous operation times out before resolving.
+ */
 export class TimeoutError extends Error {
     constructor(message?: string, options?: ErrorOptions) {
         super(message, options)
@@ -61,6 +65,9 @@ export class TimeoutError extends Error {
     }
 }
 
+/**
+ * Thrown/rejected by a pending Mutex.lock() promise when Mutex.cancel() is called.
+ */
 export class LockCancelError extends Error {
     constructor(message?: string, options?: ErrorOptions) {
         super(message, options)
@@ -69,6 +76,15 @@ export class LockCancelError extends Error {
     }
 }
 
+/**
+ * Retrieve a value that is shared across threads.
+ * Similar to the built in worker_thread's getEnvironmentData(), but works in and across threads (instead of just between a worker and its spawning thread) and is promise based.
+ * 
+ * A Coordinator class must be running somewhere in your code for this function to work. The Coordinator class can be running in any thread.
+ * @param key a unique string value that can be used as an object key.
+ * @param timeout how long to wait for the returned promise to resolve before rejecting. Default is 100 ms.
+ * @returns a `Promise<Serializable>` that resolves to the value set for the key, or undefined if the key is not set.
+ */
 export async function getEnvironmentData(key: string, timeout: number = 100): Promise<Serializable> {
     return new Promise((resolve, reject) => {
         const id: string = Bun.randomUUIDv7()
@@ -88,6 +104,16 @@ export async function getEnvironmentData(key: string, timeout: number = 100): Pr
     })
 }
 
+/**
+ * Set a value that can be shared across threads.
+ * Similar to the built in worker_thread's setEnvironmentData(), but works in and across threads (instead of just between a worker and its spawning thread) and is promise based.
+ * 
+ * A Coordinator class must be running somewhere in your code for this function to work. The Coordinator class can be running in any thread.
+ * @param key a unique string value that can be used as an object key.
+ * @param value Any arbitrary, cloneable JavaScript value that will be cloned and passed between threads.
+ * @param timeout how long to wait for the returned promise to resolve before rejecting. Default is 100 ms.
+ * @returns a `Promise<void>`that resolves upon receiving an acknowledgment that the key/value pair was set.
+ */
 export async function setEnvironmentData(key: string, value: Serializable, timeout: number = 100): Promise<void> {
     return new Promise((resolve, reject) => {
         const id: string = Bun.randomUUIDv7()
@@ -107,15 +133,29 @@ export async function setEnvironmentData(key: string, value: Serializable, timeo
     })
 }
 
+/**
+ * A mutual exclusion lock that can be used to ensure only one thread can 
+ */
 export class Mutex {
+
+    /**
+     * 
+     */
     public readonly key: string
+
     private id: string | undefined
 
+    /**
+     * 
+     */
     public get waiting(): Promise<number> {
         return Mutex.waiting(this.key)
     }
 
     private _locked: boolean
+    /**
+     * 
+     */
     public get locked(): boolean {
         return this._locked
     }
@@ -125,6 +165,12 @@ export class Mutex {
         this._locked = false
     }
 
+    /**
+     * 
+     * @param key 
+     * @param timeout 
+     * @returns 
+     */
     public static async exists(key: string, timeout: number = 100): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
@@ -143,6 +189,12 @@ export class Mutex {
         })
     }
 
+    /**
+     * 
+     * @param key 
+     * @param timeout 
+     * @returns 
+     */
     public static async waiting(key: string, timeout: number = 100): Promise<number> {
         return new Promise<number>((resolve, reject) => {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
@@ -161,11 +213,22 @@ export class Mutex {
         })
     }
 
-    public static async lock(key: string, timeout?: number): Promise<Mutex> {
-        return new Mutex(key).lock(timeout)
+    /**
+     * 
+     * @param key 
+     * @param timeout 
+     * @returns 
+     */
+    public static async lock(key: string, priority: boolean = false, timeout?: number): Promise<Mutex> {
+        return new Mutex(key).lock(priority, timeout)
     }
 
-    public async lock(timeout?: number): Promise<this> {
+    /**
+     * 
+     * @param timeout 
+     * @returns 
+     */
+    public async lock(priority: boolean = false, timeout?: number): Promise<this> {
         return new Promise((resolve, reject) => {
             this.id = Bun.randomUUIDv7()
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
@@ -181,7 +244,12 @@ export class Mutex {
                     bc.close()
                 }
             }
-            bc.postMessage({ action: 'mutex_lock', id: this.id, key: this.key })
+            bc.postMessage({
+                action: 'mutex_lock',
+                id: this.id,
+                key: this.key,
+                priority: priority ? priority : undefined
+            })
             if (typeof timeout === 'number') {
                 Bun.sleep(timeout).then(() => {
                     reject(new TimeoutError(`mutex.lock() for key '${this.key}' timed out after ${timeout} ms. The mutex is either still locked or a Coordinator class is not running somewhere in your code.`))
@@ -191,6 +259,10 @@ export class Mutex {
         })
     }
 
+    /**
+     * 
+     * @returns 
+     */
     public cancel(): boolean {
         if (this.id) {
             const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
@@ -205,6 +277,11 @@ export class Mutex {
         return false
     }
 
+    // TODO: MAKE THIS INTO A PROMISE
+    /**
+     * 
+     * @returns 
+     */
     public release(): boolean {
         if (this.locked) {
             const bc = new BroadcastChannel(`bun-threads-coordinator`).unref()
@@ -221,6 +298,9 @@ export class Mutex {
     }
 }
 
+/**
+ * 
+ */
 export class Coordinator {
     private dataKv: { [key: string]: Serializable }
     private mutexKv: { [key: string]: string[] }
@@ -256,14 +336,19 @@ export class Coordinator {
                     })
                     break;
                 case "mutex_lock":
-                    this.mutexKv[ev.data.key] ??= []
+                    this.mutexKv[ev.data.key] ??= [] // create empty array for key if undefined
                     if (this.mutexKv[ev.data.key]!.length === 0) { // if the queue is empty, resolve lock immediately
                         this.bc.postMessage({
                             action: 'mutex_resolve_lock',
                             id: ev.data.id
                         })
                     }
-                    this.mutexKv[ev.data.key]!.push(ev.data.id) // push to queue either way
+                    if (ev.data.priority) {
+                        this.mutexKv[ev.data.key]!.splice(1, 0, ev.data.id) // push to front of queue if priority, index 0 is the current lock holder
+                    }
+                    else {
+                        this.mutexKv[ev.data.key]!.push(ev.data.id) // otherwise push to the end of the queue
+                    }
                     break;
                 case "mutex_release":
                     if (typeof this.mutexKv[ev.data.key] !== 'undefined') {
@@ -295,6 +380,9 @@ export class Coordinator {
         }
     }
 
+    /**
+     * 
+     */
     public shutdown(): void {
         this.bc.close()
         this.dataKv = {}

@@ -485,6 +485,14 @@ describe(Mutex, () => {
                 expect(Bun.peek.status(m2)).toBe('fulfilled')
                 ;(await m2).release()
             })
+            test('goes to front of queue when priority', async () => {
+                const first = await Mutex.lock('front')
+                Mutex.lock('front')
+                const skipper = Mutex.lock('front', true)
+                first.release()
+                await Bun.sleep(100) // give release time to work since it doesn't return a promise
+                expect(coord['mutexKv']['front'][0]).toBe((await skipper)['id']!)
+            })
             test('rejects when cancelled', async () => {
                 const m1: Mutex = await new Mutex('rejectoncancel').lock()
                 const m2: Mutex = new Mutex('rejectoncancel')
@@ -496,7 +504,7 @@ describe(Mutex, () => {
             test('rejects on timeout', async () => {
                 const m1: Mutex = await new Mutex('rejectontimeout').lock()
                 const m2: Mutex = new Mutex('rejectontimeout')
-                expect(m2.lock(10)).rejects.toBeInstanceOf(Error)
+                expect(m2.lock(false, 10)).rejects.toBeInstanceOf(Error)
                 m1.release()
             })
         })
