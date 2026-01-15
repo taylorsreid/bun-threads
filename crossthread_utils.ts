@@ -8,12 +8,12 @@ import { BroadcastChannel, type Serializable } from "worker_threads";
 type BunThreadsMessage = {
     action: 'data_set',
     id: string,
-    key: string,
+    key: Serializable,
     value: Serializable
 }| {
     action: 'data_get',
     id: string,
-    key: string
+    key: Serializable
 } | {
     action: 'data_resolve_set',
     id: string
@@ -302,13 +302,13 @@ export class Mutex {
  * 
  */
 export class Coordinator {
-    private dataKv: { [key: string]: Serializable }
-    private mutexKv: { [key: string]: string[] }
+    private dataMap: Map<Serializable, Serializable>
+    private mutexMap: Map<string, string[]>
     private bc: BroadcastChannel
 
     constructor() {
-        this.dataKv = {}
-        this.mutexKv = {}
+        this.dataMap = new Map<Serializable, Serializable>()
+        this.mutexMap = new Map<string, string[]>
         this.bc = new BroadcastChannel(`bun-threads-coordinator`).unref()
 
         // @ts-expect-error
@@ -318,11 +318,11 @@ export class Coordinator {
                     this.bc.postMessage({
                         action: 'data_resolve_get',
                         id: ev.data.id,
-                        value: this.dataKv[ev.data.key]
+                        value: this.dataMap.get(ev.data.key)
                     })
                     break;
                 case "data_set":
-                    this.dataKv[ev.data.key] = ev.data.value
+                    this.dataMap.set(ev.data.key, ev.data.value)
                     this.bc.postMessage({
                         action: 'data_resolve_set',
                         id: ev.data.id
@@ -332,44 +332,43 @@ export class Coordinator {
                     this.bc.postMessage({
                         action: 'mutex_resolve_exists',
                         key: ev.data.key,
-                        value: typeof this.mutexKv[ev.data.key] !== 'undefined'
+                        value: this.mutexMap.has(ev.data.key)
                     })
                     break;
                 case "mutex_lock":
-                    this.mutexKv[ev.data.key] ??= [] // create empty array for key if undefined
-                    if (this.mutexKv[ev.data.key]!.length === 0) { // if the queue is empty, resolve lock immediately
+                    if (!this.mutexMap.has(ev.data.key)) this.mutexMap.set(ev.data.key, [])
+
+                    if (ev.data.priority) this.mutexMap.get(ev.data.key)!.splice(1, 0, ev.data.id)
+                    else this.mutexMap.get(ev.data.key)!.push(ev.data.id)
+
+                    if (this.mutexMap.get(ev.data.key)!.length === 1) { // if the queue was empty before the push, resolve lock immediately
                         this.bc.postMessage({
                             action: 'mutex_resolve_lock',
                             id: ev.data.id
                         })
                     }
-                    if (ev.data.priority) {
-                        this.mutexKv[ev.data.key]!.splice(1, 0, ev.data.id) // push to front of queue if priority, index 0 is the current lock holder
-                    }
-                    else {
-                        this.mutexKv[ev.data.key]!.push(ev.data.id) // otherwise push to the end of the queue
-                    }
                     break;
                 case "mutex_release":
-                    if (typeof this.mutexKv[ev.data.key] !== 'undefined') {
-                        this.mutexKv[ev.data.key]!.shift()
-                        if (this.mutexKv[ev.data.key]![0]) { // if there's still waiters, resolve the first in line's lock
+                    if (this.mutexMap.has(ev.data.key)) {
+                        this.mutexMap.get(ev.data.key)!.shift()
+                        if (this.mutexMap.get(ev.data.key)![0]) { // if there's still waiters, resolve the first in line's lock
                             this.bc.postMessage({
                                 action: 'mutex_resolve_lock',
-                                id: this.mutexKv[ev.data.key]![0]
+                                id: this.mutexMap.get(ev.data.key)![0]
                             })
                         }
                     }
                     break;
                 case "mutex_waiting":
+                    // console.log('QUEUE IS', this.mutexKv.get(ev.data.key))
                     this.bc.postMessage({
                         action: 'mutex_resolve_waiting',
-                        value: this.mutexKv[ev.data.key]?.length ?? 0
+                        value: this.mutexMap.get(ev.data.key)?.length ?? 0
                     })
                     break;
                 case "mutex_cancel":
-                    if (typeof this.mutexKv[ev.data.key] !== 'undefined') {
-                        this.mutexKv[ev.data.key]!.splice(this.mutexKv[ev.data.key]!.indexOf(ev.data.id), 1)
+                    if (this.mutexMap.has(ev.data.key)) {
+                        this.mutexMap.get(ev.data.key)!.splice(this.mutexMap.get(ev.data.key)!.indexOf(ev.data.id), 1)
                         this.bc.postMessage({
                             action: 'mutex_reject_lock',
                             id: ev.data.id
@@ -385,8 +384,8 @@ export class Coordinator {
      */
     public shutdown(): void {
         this.bc.close()
-        this.dataKv = {}
-        this.mutexKv = {}
+        this.dataMap.clear()
+        this.mutexMap.clear()
     }
 
 }

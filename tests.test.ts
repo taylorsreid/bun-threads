@@ -445,7 +445,7 @@ describe(Mutex, () => {
             const m = new Mutex('constructor')
             expect(m.key).toBe('constructor')
             expect(m['id']).toBeUndefined()
-            expect(await m.waiting).toBe(1)
+            expect(await m.waiting).toBe(0)
             expect(m.locked).toBeFalse()
         })
         describe('lock', () => {
@@ -491,7 +491,7 @@ describe(Mutex, () => {
                 const skipper = Mutex.lock('front', true)
                 first.release()
                 await Bun.sleep(100) // give release time to work since it doesn't return a promise
-                expect(coord['mutexKv']['front'][0]).toBe((await skipper)['id']!)
+                expect(coord['mutexMap'].get('front')![0]).toBe((await skipper)['id']!)
             })
             test('rejects when cancelled', async () => {
                 const m1: Mutex = await new Mutex('rejectoncancel').lock()
