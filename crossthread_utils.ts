@@ -10,7 +10,7 @@ type BunThreadsMessage = {
     id: string,
     key: Serializable,
     value: Serializable
-}| {
+} | {
     action: 'data_get',
     id: string,
     key: Serializable
@@ -32,6 +32,9 @@ type BunThreadsMessage = {
     key: string
 } | {
     action: 'mutex_release',
+    key: string
+} | {
+    action: 'mutex_resolve_release',
     key: string
 } | {
     action: 'mutex_exists',
@@ -134,19 +137,21 @@ export async function setEnvironmentData(key: string, value: Serializable, timeo
 }
 
 /**
- * A mutual exclusion lock that can be used to ensure only one thread can 
+ * A mutual exclusion lock that can be used to ensure only one thread can access a shared resource at a time.
+ * TODO:
+ * @example
  */
 export class Mutex {
 
     /**
-     * 
+     * A unique string identifier for this Mutex that can be used across threads to obtain and release the lock.
      */
     public readonly key: string
 
     private id: string | undefined
 
     /**
-     * 
+     * How many mutex instances are currently using/waiting on the lock. This number includes the current lock holder and the instance that called this property getter.
      */
     public get waiting(): Promise<number> {
         return Mutex.waiting(this.key)
@@ -154,22 +159,27 @@ export class Mutex {
 
     private _locked: boolean
     /**
-     * 
+     * If this mutex instance is the current lock holder.
      */
     public get locked(): boolean {
         return this._locked
     }
 
+    /**
+     * Create a new mutual exclusion lock that can be used to ensure only one thread can access a shared resource at a time. The mutex will not be locked until the asynchronous .lock() method is called and resolved.
+     * @param key a unique string identifier for this mutex that can be used across threads to obtain and release the lock.
+     */
     constructor(key: string) {
         this.key = key
         this._locked = false
     }
 
     /**
-     * 
-     * @param key 
-     * @param timeout 
-     * @returns 
+     * Check whether a mutex exists in memory for a given key. This method will return true if a mutex has previously existed for this key,
+     * even if no other mutex instances are currently waiting.
+     * @param key the unique string identifier for the mutex.
+     * @param timeout how long in milliseconds to wait on the Coordinator class to respond before the returned promise rejects. Default is 100 ms.
+     * @returns a `Promise<boolean>` that resolves to whether a mutex exists or has existed for the given key.
      */
     public static async exists(key: string, timeout: number = 100): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
@@ -190,10 +200,10 @@ export class Mutex {
     }
 
     /**
-     * 
-     * @param key 
-     * @param timeout 
-     * @returns 
+     * Get the amount of mutex instances that are currently using/waiting on the lock. This number includes the current lock holder.
+     * @param key the unique string identifier for the mutex.
+     * @param timeout how long in milliseconds to wait on the Coordinator class to respond before the returned promise rejects. Default is 100 ms.
+     * @returns a `Promise<number>` that resolves to how many mutex instances are currently using/waiting on the lock. This number includes the current lock holder.
      */
     public static async waiting(key: string, timeout: number = 100): Promise<number> {
         return new Promise<number>((resolve, reject) => {
@@ -214,19 +224,23 @@ export class Mutex {
     }
 
     /**
-     * 
-     * @param key 
-     * @param timeout 
-     * @returns 
+     * Create a new Mutex instance and immediately call the asynchronous .lock() method. This static method is shorthand for `await new Mutex('key').lock()`.
+     * @param key the unique string identifier for the mutex.
+     * @param priority if true, place this request at the front of the queue to resolve next, skipping all other lock requests. Default is false.
+     * @param timeout how long in milliseconds to wait for the lock to resolve before the returned promise rejects. Default is to wait indefinitely.
+     * @throws TODO:
+     * @returns a `Promise<Mutex>` that once resolved, can be used to call the instance .release() method.
      */
     public static async lock(key: string, priority: boolean = false, timeout?: number): Promise<Mutex> {
         return new Mutex(key).lock(priority, timeout)
     }
 
     /**
-     * 
-     * @param timeout 
-     * @returns 
+     * Request a mutual exclusion lock for the given key. Only one instance can hold a lock at any given time.
+     * @param priority if true, place this request at the front of the queue to resolve next, skipping all other lock requests. Default is false.
+     * @param timeout how long in milliseconds to wait for the lock to resolve before the returned promise rejects. Default is to wait indefinitely.
+     * @throws TODO:
+     * @returns a Promise that resolves when the mutual exclusion lock has been obtained. Don't forget to call release afterwards or your program will deadlock.
      */
     public async lock(priority: boolean = false, timeout?: number): Promise<this> {
         return new Promise((resolve, reject) => {
@@ -260,21 +274,38 @@ export class Mutex {
     }
 
     /**
-     * 
+     * TODO:
+     * @param timeout 
      * @returns 
+     * @throws
+     * @example
      */
-    public cancel(): boolean {
-        if (this.id) {
-            const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
-            bc.postMessage({
-                action: 'mutex_cancel',
-                id: this.id,
-                key: this.key
-            })
-            bc.close()
-            return true
-        }
-        return false
+    public async cancel(timeout: number = 100): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            if (this.id) {
+                const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
+                // @ts-ignore
+                bc.onmessage = (ev: MessageEvent<BunThreadsMessage>) => {
+                    if (ev.data.action === 'mutex_reject_lock' && ev.data.id === this.id) {
+                        resolve(true)
+                        this.id = undefined
+                        bc.close()
+                    }
+                }
+                bc.postMessage({
+                    action: 'mutex_cancel',
+                    id: this.id,
+                    key: this.key
+                })
+                Bun.sleep(timeout).then(() => {
+                    reject(new TimeoutError(`mutex.cancel() for key '${this.key}' timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+                    bc.close()
+                })
+            }
+            else {
+                resolve(false)
+            }
+        })
     }
 
     // TODO: MAKE THIS INTO A PROMISE
@@ -360,7 +391,6 @@ export class Coordinator {
                     }
                     break;
                 case "mutex_waiting":
-                    // console.log('QUEUE IS', this.mutexKv.get(ev.data.key))
                     this.bc.postMessage({
                         action: 'mutex_resolve_waiting',
                         value: this.mutexMap.get(ev.data.key)?.length ?? 0

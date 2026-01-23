@@ -3,9 +3,9 @@
 // The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 // THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { availableParallelism } from 'os';
-import { Coordinator, getEnvironmentData, Mutex, setEnvironmentData, Thread, ThreadPool, TimeoutError } from './';
+import { Coordinator, getEnvironmentData, LockCancelError, Mutex, setEnvironmentData, Thread, ThreadPool, TimeoutError } from './';
 
 const helloWorld = () => {
     return 'hello world'
@@ -498,29 +498,30 @@ describe(Mutex, () => {
                 const m2: Mutex = new Mutex('rejectoncancel')
                 const result: Promise<Mutex> = m2.lock()
                 m2.cancel()
-                expect(result).rejects.toBeInstanceOf(Error)
-                m1.release()
+                expect(result).rejects.toBeInstanceOf(LockCancelError)
             })
             test('rejects on timeout', async () => {
                 const m1: Mutex = await new Mutex('rejectontimeout').lock()
                 const m2: Mutex = new Mutex('rejectontimeout')
-                expect(m2.lock(false, 10)).rejects.toBeInstanceOf(Error)
+                expect(m2.lock(false, 10)).rejects.toBeInstanceOf(TimeoutError)
                 m1.release()
             })
         })
         describe('cancel', () => {
-            test('returns true on a valid cancel request', () => {
-                const m = new Mutex('cancelreturnstrue')
-                m.lock()
-                expect(m.cancel()).toBeTrue()
-                m.release()
+            test('returns true on a valid cancel request', async () => {
+                const m1 = new Mutex('cancelreturnstrue')
+                const m2 = new Mutex('cancelreturnstrue')
+                await m1.lock()
+                m2.lock().catch(() => {}) // do nothing
+                expect(m2.cancel()).resolves.toBeTrue()
+                m1.release()
             })
             test('returns false on an invalid cancel request', async () => {
                 const m = new Mutex('cancelreturnsfalse')
-                expect(m.cancel()).toBeFalse()
+                expect(await m.cancel()).toBeFalse()
                 await m.lock()
                 m.release()
-                expect(m.cancel()).toBeFalse()
+                expect(await m.cancel()).toBeFalse()
             })
         })
         describe('release', () => {
@@ -598,10 +599,10 @@ describe(Mutex, () => {
 
 describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
     let coord: Coordinator
-    beforeAll(() => {
+    beforeEach(() => {
         coord = new Coordinator()
     })
-    afterAll(() => {
+    afterEach(() => {
         coord.shutdown()
     })
     describe(setEnvironmentData, () => {
@@ -611,7 +612,6 @@ describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
         test('rejects', () => {
             coord.shutdown()
             expect(setEnvironmentData('foo', 'bar', 0)).rejects.toThrowError(TimeoutError)
-            coord = new Coordinator()
         })
     })
     describe(getEnvironmentData, () => {
@@ -622,7 +622,6 @@ describe(setEnvironmentData.name + ' & ' + getEnvironmentData.name, () => {
         test('rejects', async () => {
             coord.shutdown()
             expect(getEnvironmentData('foo')).rejects.toThrowError(TimeoutError)
-            coord = new Coordinator()
         })
     })
 })
