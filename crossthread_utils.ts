@@ -308,24 +308,36 @@ export class Mutex {
         })
     }
 
-    // TODO: MAKE THIS INTO A PROMISE
     /**
      * 
+     * @param timeout 
      * @returns 
      */
-    public release(): boolean {
-        if (this.locked) {
-            const bc = new BroadcastChannel(`bun-threads-coordinator`).unref()
-            bc.postMessage({
-                action: 'mutex_release',
-                key: this.key
-            })
-            bc.close()
-            this.id = undefined
-            this._locked = false
-            return true
-        }
-        return false
+    public async release(timeout: number = 100): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            if (this.locked) {
+                const bc = new BroadcastChannel(`bun-threads-coordinator`).unref()
+                // @ts-ignore
+                bc.onmessage = (ev: MessageEvent<BunThreadsMessage>) => {
+                    if (ev.data.action === 'mutex_resolve_release' && ev.data.key === this.key) {
+                        resolve(true)
+                        this.id = undefined
+                        this._locked = false
+                        bc.close()
+                    }
+                }
+                bc.postMessage({
+                    action: 'mutex_release',
+                    key: this.key
+                })
+                Bun.sleep(timeout).then(() => {
+                    reject(new TimeoutError(`mutex.release() for key '${this.key}' timed out after ${timeout} ms. Is a Coordinator class running somewhere in your code?`))
+                })
+            }
+            else {
+                resolve(false)
+            }
+        })
     }
 }
 
@@ -381,6 +393,10 @@ export class Coordinator {
                     break;
                 case "mutex_release":
                     if (this.mutexMap.has(ev.data.key)) {
+                        this.bc.postMessage({
+                            action: 'mutex_resolve_release',
+                            key: ev.data.key
+                        })
                         this.mutexMap.get(ev.data.key)!.shift()
                         if (this.mutexMap.get(ev.data.key)![0]) { // if there's still waiters, resolve the first in line's lock
                             this.bc.postMessage({

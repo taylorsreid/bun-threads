@@ -425,7 +425,7 @@ describe(Mutex, () => {
     describe('static', async () => {
         test('exists', async () => {
             expect(await Mutex.exists('staticexists')).toBeFalse()
-            ;(await Mutex.lock('staticexists')).release()
+            await (await Mutex.lock('staticexists')).release()
             expect(await Mutex.exists('staticexists')).toBeTrue()
         })
         test('waiting', async () => {
@@ -465,7 +465,7 @@ describe(Mutex, () => {
                 test('causes locked to be true', async () => {
                     const m = await new Mutex('locked').lock()
                     expect(m.locked).toBeTrue()
-                    m.release()
+                    await m.release()
                     expect(m.locked).toBeFalse()
                 })
             })
@@ -480,7 +480,7 @@ describe(Mutex, () => {
                 expect(Bun.peek.status(m2)).toBe('pending')
                 await Bun.sleep(100) // make sure it's not just pending because it was just created
                 expect(Bun.peek.status(m2)).toBe('pending')
-                m1.release()
+                await m1.release()
                 expect(await m2).toBeInstanceOf(Mutex)
                 expect(Bun.peek.status(m2)).toBe('fulfilled')
                 ;(await m2).release()
@@ -489,8 +489,7 @@ describe(Mutex, () => {
                 const first = await Mutex.lock('front')
                 Mutex.lock('front')
                 const skipper = Mutex.lock('front', true)
-                first.release()
-                await Bun.sleep(100) // give release time to work since it doesn't return a promise
+                await first.release()
                 expect(coord['mutexMap'].get('front')![0]).toBe((await skipper)['id']!)
             })
             test('rejects when cancelled', async () => {
@@ -520,26 +519,26 @@ describe(Mutex, () => {
                 const m = new Mutex('cancelreturnsfalse')
                 expect(await m.cancel()).toBeFalse()
                 await m.lock()
-                m.release()
+                await m.release()
                 expect(await m.cancel()).toBeFalse()
             })
         })
         describe('release', () => {
             test('side effects', async () => {
                 const m = await new Mutex('releasesides').lock()
-                m.release()
+                await m.release()
                 expect(m.locked).toBeFalse()
                 expect(m['id']).toBeUndefined()
                 expect(await m.waiting).toBe(0)
             })
             test('returns true when locked', async () => {
                 const m = await new Mutex('releasereturnstrue').lock()
-                expect(m.release()).toBeTrue()
+                expect(await m.release()).toBeTrue()
             })
             test('returns false when not locked', async () => {
                 const m = await new Mutex('releasereturnsfalse').lock()
-                m.release()
-                expect(m.release()).toBeFalse()
+                await m.release()
+                expect(await m.release()).toBeFalse()
             })
         })
     })
@@ -547,7 +546,7 @@ describe(Mutex, () => {
         test('can run in a Thread', async () => {
             const thread = new Thread(async () => {
                 const Mutex = (await import('./')).Mutex
-                ;(await Mutex.lock('thread')).release()
+                await (await Mutex.lock('thread')).release()
                 return true
             })
             expect(await thread.run()).toBeTrue()
@@ -555,7 +554,7 @@ describe(Mutex, () => {
         test('can run in a ThreadPool', async () => {
             const tp = new ThreadPool(async () => {
                 const Mutex = (await import('./')).Mutex
-                ;(await Mutex.lock('threadpool')).release()
+                await (await Mutex.lock('threadpool')).release()
                 return true
             })
             expect(await tp.run()).toBeTrue()
