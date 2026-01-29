@@ -87,6 +87,7 @@ export class LockCancelError extends Error {
  * @param key a unique string value that can be used as an object key.
  * @param timeout how long to wait for the returned promise to resolve before rejecting. Default is 100 ms.
  * @returns a `Promise<Serializable>` that resolves to the value set for the key, or undefined if the key is not set.
+ * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
  */
 export async function getEnvironmentData(key: string, timeout: number = 100): Promise<Serializable> {
     return new Promise((resolve, reject) => {
@@ -116,6 +117,7 @@ export async function getEnvironmentData(key: string, timeout: number = 100): Pr
  * @param value Any arbitrary, cloneable JavaScript value that will be cloned and passed between threads.
  * @param timeout how long to wait for the returned promise to resolve before rejecting. Default is 100 ms.
  * @returns a `Promise<void>`that resolves upon receiving an acknowledgment that the key/value pair was set.
+ * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
  */
 export async function setEnvironmentData(key: string, value: Serializable, timeout: number = 100): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -138,8 +140,26 @@ export async function setEnvironmentData(key: string, value: Serializable, timeo
 
 /**
  * A mutual exclusion lock that can be used to ensure only one thread can access a shared resource at a time.
- * TODO:
  * @example
+ * ```ts
+ * import { Coordinator, Mutex } from "bun-threads";
+ * 
+ * // this must be present somewhere in any thread
+ * const coord: Coordinator = new Coordinator()
+ * 
+ * // in one thread
+ * const oneMutex: Mutex = await Mutex.lock('example') // await Mutex.lock('example') is just shorthand for await new Mutex('example').lock()
+ * // do some stuff here while you have a mutual exclusion lock
+ * // ...
+ * await oneMutex.release() // don't forget to release or you may deadlock your program
+ * 
+ * // in a different thread (or same thread if you're using it inside of asynchronous functions)
+ * const anotherMutex: Mutex = new Mutex('example')
+ * await anotherMutex.lock() // this won't resolve until oneMutex and every other mutex instance that called prior has locked and released
+ * // do some stuff here while you have a mutual exclusion lock
+ * // ...
+ * await anotherMutex.release()
+ * ```
  */
 export class Mutex {
 
@@ -151,7 +171,7 @@ export class Mutex {
     private id: string | undefined
 
     /**
-     * How many mutex instances are currently using/waiting on the lock. This number includes the current lock holder and the instance that called this property getter.
+     * How many mutex instances are currently locked/waiting on the lock. This number includes the current lock holder and the instance that called this property getter.
      */
     public get waiting(): Promise<number> {
         return Mutex.waiting(this.key)
@@ -180,6 +200,7 @@ export class Mutex {
      * @param key the unique string identifier for the mutex.
      * @param timeout how long in milliseconds to wait on the Coordinator class to respond before the returned promise rejects. Default is 100 ms.
      * @returns a `Promise<boolean>` that resolves to whether a mutex exists or has existed for the given key.
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      */
     public static async exists(key: string, timeout: number = 100): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
@@ -203,7 +224,8 @@ export class Mutex {
      * Get the amount of mutex instances that are currently using/waiting on the lock. This number includes the current lock holder.
      * @param key the unique string identifier for the mutex.
      * @param timeout how long in milliseconds to wait on the Coordinator class to respond before the returned promise rejects. Default is 100 ms.
-     * @returns a `Promise<number>` that resolves to how many mutex instances are currently using/waiting on the lock. This number includes the current lock holder.
+     * @returns a `Promise<number>` that resolves to how many mutex instances are currently locked/waiting on the lock. This number includes the current lock holder.
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      */
     public static async waiting(key: string, timeout: number = 100): Promise<number> {
         return new Promise<number>((resolve, reject) => {
@@ -228,8 +250,8 @@ export class Mutex {
      * @param key the unique string identifier for the mutex.
      * @param priority if true, place this request at the front of the queue to resolve next, skipping all other lock requests. Default is false.
      * @param timeout how long in milliseconds to wait for the lock to resolve before the returned promise rejects. Default is to wait indefinitely.
-     * @throws TODO:
      * @returns a `Promise<Mutex>` that once resolved, can be used to call the instance .release() method.
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      */
     public static async lock(key: string, priority: boolean = false, timeout?: number): Promise<Mutex> {
         return new Mutex(key).lock(priority, timeout)
@@ -239,8 +261,8 @@ export class Mutex {
      * Request a mutual exclusion lock for the given key. Only one instance can hold a lock at any given time.
      * @param priority if true, place this request at the front of the queue to resolve next, skipping all other lock requests. Default is false.
      * @param timeout how long in milliseconds to wait for the lock to resolve before the returned promise rejects. Default is to wait indefinitely.
-     * @throws TODO:
      * @returns a Promise that resolves when the mutual exclusion lock has been obtained. Don't forget to call release afterwards or your program will deadlock.
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      */
     public async lock(priority: boolean = false, timeout?: number): Promise<this> {
         return new Promise((resolve, reject) => {
@@ -266,7 +288,7 @@ export class Mutex {
             })
             if (typeof timeout === 'number') {
                 Bun.sleep(timeout).then(() => {
-                    reject(new TimeoutError(`mutex.lock() for key '${this.key}' timed out after ${timeout} ms. The mutex is either still locked or a Coordinator class is not running somewhere in your code.`))
+                    reject(new TimeoutError(`mutex.lock() for key '${this.key}' timed out after ${timeout} ms. The mutex is either still locked by another instance, or a Coordinator class is not running somewhere in your code.`))
                     bc.close()
                 })
             }
@@ -274,15 +296,33 @@ export class Mutex {
     }
 
     /**
-     * TODO:
-     * @param timeout 
-     * @returns 
-     * @throws
+     * Cancel a pending request for this instance's mutual exclusion lock. Causes all pending .lock() promises on this instance to reject with a {@link LockCancelError}.
+     * @param timeout how long in milliseconds to wait on the Coordinator class to respond before the returned promise rejects. Default is 100 ms.
+     * @returns a `Promise<boolean>` that resolves to true if there was a pending lock request on this instance, or false if there was not.
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      * @example
+     * ```ts
+     * import { Coordinator, LockCancelError, Mutex } from "./";
+     * const coord = new Coordinator()
+     * 
+     * const m1 = new Mutex('cancelExample')
+     * const m2 = new Mutex('cancelExample')
+     * 
+     * m1.lock()
+     *      .then(() => console.log('Mutex 1 lock was obtained'))
+     *      .catch((error: LockCancelError) => console.log('Lock 1:', error.message))
+     * m2.lock()
+     *      .then(() => console.log('Mutex 2 lock was obtained.'))
+     *      .catch((error: LockCancelError) => console.log('Lock 2:', error.message))
+     * 
+     * await m2.cancel()
+     * // Mutex 1 lock was obtained
+     * // Lock 2: Lock request for key "cancelExample" was canceled.
+     * ```
      */
     public async cancel(timeout: number = 100): Promise<boolean> {
         return new Promise((resolve, reject) => {
-            if (this.id) {
+            if (this.id) { // use this.id instead of this.locked because this.locked isn't true until the lock has resolved
                 const bc: BroadcastChannel = new BroadcastChannel(`bun-threads-coordinator`).unref()
                 // @ts-ignore
                 bc.onmessage = (ev: MessageEvent<BunThreadsMessage>) => {
@@ -312,6 +352,7 @@ export class Mutex {
      * 
      * @param timeout 
      * @returns 
+     * @throws a {@link TimeoutError} if the promise has not resolved after the amount of time set in the timeout parameter. Default is 100 ms.
      */
     public async release(timeout: number = 100): Promise<boolean> {
         return new Promise((resolve, reject) => {
